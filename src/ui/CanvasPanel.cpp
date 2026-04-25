@@ -1,4 +1,4 @@
-﻿#include "ui/CanvasPanel.h"
+#include "ui/CanvasPanel.h"
 #include <imgui.h>
 #include <SDL3/SDL.h>
 
@@ -16,7 +16,6 @@ CanvasPanel::CanvasPanel(Document* document, Timeline* timeline,
     , m_toolManager(toolManager), m_renderer(renderer)
 {}
 
-// Helper: get current frame as snapshot
 static Snapshot currentSnapshot(Document& doc, int frameIndex) {
     auto& frame = doc.frame(frameIndex);
     Snapshot snap;
@@ -27,7 +26,6 @@ static Snapshot currentSnapshot(Document& doc, int frameIndex) {
     return snap;
 }
 
-// Helper: apply a snapshot back to the document
 static void applySnapshot(Document& doc, const Snapshot& snap) {
     auto& frame = doc.frame(snap.frameIndex);
     frame.pixels() = snap.pixels;
@@ -38,13 +36,12 @@ void CanvasPanel::render() {
     ImGuiIO& io = ImGui::GetIO();
 
     ImGuiWindowFlags flags = ImGuiWindowFlags_NoScrollbar |
-                         ImGuiWindowFlags_NoScrollWithMouse |
-                         ImGuiWindowFlags_NoMove;
-                         
-    ImGui::SetNextWindowPos({180, 30}, ImGuiCond_FirstUseEver);
+                             ImGuiWindowFlags_NoScrollWithMouse |
+                             ImGuiWindowFlags_NoMove;
+    ImGui::SetNextWindowPos({180, 30 + 32}, ImGuiCond_FirstUseEver);
     ImGui::SetNextWindowSize({
         io.DisplaySize.x - 240,
-        io.DisplaySize.y - 200
+        io.DisplaySize.y - 232
     }, ImGuiCond_FirstUseEver);
     ImGui::Begin("Canvas", nullptr, flags);
 
@@ -81,63 +78,106 @@ void CanvasPanel::render() {
     dl->AddRect({originX,originY},{originX+canvasW,originY+canvasH},
                 IM_COL32(80,80,80,255), 0.f, 0, 2.f);
 
-    // Window bounds
-    ImVec2 winMin = ImGui::GetWindowPos();
-    ImVec2 winMax = {winMin.x + ImGui::GetWindowWidth(),
-                     winMin.y + ImGui::GetWindowHeight()};
-    ImVec2 mp = io.MousePos;
-    bool inWindow = mp.x >= winMin.x && mp.x < winMax.x &&
-                    mp.y >= winMin.y && mp.y < winMax.y;
-    bool inCanvas = mp.x >= originX && mp.x < originX + canvasW &&
-                    mp.y >= originY && mp.y < originY + canvasH;
+    // Input state
+    ImVec2 winPos  = ImGui::GetWindowPos();
+    ImVec2 winSize = {ImGui::GetWindowWidth(), ImGui::GetWindowHeight()};
+    ImVec2 mp      = io.MousePos;
+
+    bool inWindow  = mp.x >= winPos.x && mp.x < winPos.x + winSize.x &&
+                     mp.y >= winPos.y && mp.y < winPos.y + winSize.y;
+    bool inCanvas  = mp.x >= originX && mp.x < originX + canvasW &&
+                     mp.y >= originY && mp.y < originY + canvasH;
     bool spaceHeld = ImGui::IsKeyDown(ImGuiKey_Space);
     bool ctrlHeld  = io.KeyCtrl;
+    bool popupOpen = ImGui::IsPopupOpen("", ImGuiPopupFlags_AnyPopupId);
 
-    // ── Undo / Redo ───────────────────────────────────────────────────────────
-    if (ctrlHeld && ImGui::IsKeyPressed(ImGuiKey_Z, false)) {
-        History& hist = m_toolManager->history();
-        if (hist.canUndo()) {
-            int fi = m_timeline->currentFrame();
-            Snapshot restored = hist.undo(currentSnapshot(*m_document, fi));
-            applySnapshot(*m_document, restored);
-        }
-    }
-    if (ctrlHeld && (ImGui::IsKeyPressed(ImGuiKey_Y, false) ||
-                    (io.KeyShift && ImGui::IsKeyPressed(ImGuiKey_Z, false)))) {
-        History& hist = m_toolManager->history();
-        if (hist.canRedo()) {
-            int fi = m_timeline->currentFrame();
-            Snapshot restored = hist.redo(currentSnapshot(*m_document, fi));
-            applySnapshot(*m_document, restored);
-        }
+    // ── Keyboard shortcuts ────────────────────────────────────────────────────
+    if (!ctrlHeld && !io.WantTextInput && !popupOpen) {
+        if (ImGui::IsKeyPressed(ImGuiKey_B, false))
+            m_toolManager->selectTool(ToolType::Pencil);
+        if (ImGui::IsKeyPressed(ImGuiKey_E, false))
+            m_toolManager->selectTool(ToolType::Eraser);
+        if (ImGui::IsKeyPressed(ImGuiKey_F, false))
+            m_toolManager->selectTool(ToolType::Fill);
+        if (ImGui::IsKeyPressed(ImGuiKey_I, false))
+            m_toolManager->selectTool(ToolType::Eyedropper);
+        if (ImGui::IsKeyPressed(ImGuiKey_RightArrow, false))
+            m_timeline->nextFrame();
+        if (ImGui::IsKeyPressed(ImGuiKey_LeftArrow, false))
+            m_timeline->prevFrame();
     }
 
-    // ── Zoom ──────────────────────────────────────────────────────────────────
-    if (inWindow && io.MouseWheel != 0.f) {
+    // ── Zoom with + / - keys ─────────────────────────────────────────────────
+    if (inWindow && !io.WantTextInput && !popupOpen) {
+        if (ImGui::IsKeyPressed(ImGuiKey_Equal, false) ||
+            ImGui::IsKeyPressed(ImGuiKey_KeypadAdd, false)) {
+            float oldZoom = m_zoom;
+            float step = m_zoom < 2.f ? 0.25f : (m_zoom < 8.f ? 0.5f : 1.f);
+            m_zoom = fnClamp(m_zoom + step, 0.25f, 64.f);
+            m_panX = m_panX * (m_zoom / oldZoom);
+            m_panY = m_panY * (m_zoom / oldZoom);
+        }
+        if (ImGui::IsKeyPressed(ImGuiKey_Minus, false) ||
+            ImGui::IsKeyPressed(ImGuiKey_KeypadSubtract, false)) {
+            float oldZoom = m_zoom;
+            float step = m_zoom <= 2.f ? 0.25f : (m_zoom <= 8.f ? 0.5f : 1.f);
+            m_zoom = fnClamp(m_zoom - step, 0.25f, 64.f);
+            m_panX = m_panX * (m_zoom / oldZoom);
+            m_panY = m_panY * (m_zoom / oldZoom);
+        }
+        if (ctrlHeld && ImGui::IsKeyPressed(ImGuiKey_0, false)) {
+            m_zoom = 1.0f;
+            m_panX = 0.f;
+            m_panY = 0.f;
+        }
+    }
+
+    // ── Zoom with scroll wheel ────────────────────────────────────────────────
+    if (inWindow && !popupOpen && io.MouseWheel != 0.f) {
+        float step = m_zoom < 2.f ? 0.25f : (m_zoom < 8.f ? 0.5f : 1.f);
         float oldZoom = m_zoom;
-        float zoomStep = m_zoom < 2.f ? 0.25f : (m_zoom < 8.f ? 0.5f : 1.f);
         m_zoom = fnClamp(
-            io.MouseWheel > 0.f ? m_zoom + zoomStep : m_zoom - zoomStep,
+            io.MouseWheel > 0.f ? m_zoom + step : m_zoom - step,
             0.25f, 64.f);
         float ratio = m_zoom / oldZoom;
-        float cx = panelPos.x + panelSize.x * 0.5f;
-        float cy = panelPos.y + panelSize.y * 0.5f;
-        m_panX = (m_panX + mp.x - cx) * ratio - (mp.x - cx);
-        m_panY = (m_panY + mp.y - cy) * ratio - (mp.y - cy);
+        m_panX = (m_panX - (mp.x - (panelPos.x + panelSize.x * 0.5f))) * ratio
+                 + (mp.x - (panelPos.x + panelSize.x * 0.5f));
+        m_panY = (m_panY - (mp.y - (panelPos.y + panelSize.y * 0.5f))) * ratio
+                 + (mp.y - (panelPos.y + panelSize.y * 0.5f));
         io.MouseWheel = 0.f;
     }
 
+    // ── Undo / Redo ───────────────────────────────────────────────────────────
+    if (ctrlHeld && !popupOpen) {
+        if (ImGui::IsKeyPressed(ImGuiKey_Z, false)) {
+            History& hist = m_toolManager->history();
+            if (hist.canUndo()) {
+                int fi = m_timeline->currentFrame();
+                Snapshot restored = hist.undo(currentSnapshot(*m_document, fi));
+                applySnapshot(*m_document, restored);
+            }
+        }
+        if (ImGui::IsKeyPressed(ImGuiKey_Y, false) ||
+            (io.KeyShift && ImGui::IsKeyPressed(ImGuiKey_Z, false))) {
+            History& hist = m_toolManager->history();
+            if (hist.canRedo()) {
+                int fi = m_timeline->currentFrame();
+                Snapshot restored = hist.redo(currentSnapshot(*m_document, fi));
+                applySnapshot(*m_document, restored);
+            }
+        }
+    }
+
     // ── Pan ───────────────────────────────────────────────────────────────────
-    // Middle mouse always pans, Space+left only pans when not already drawing
     bool isPanning = io.MouseDown[2] || (spaceHeld && io.MouseDown[0]);
     bool isDrawing = inCanvas && !spaceHeld && !io.MouseDown[2] && io.MouseDown[0];
-    if (inWindow && isPanning && !isDrawing) {
+    if (inWindow && isPanning && !isDrawing && !popupOpen) {
         m_panX += io.MouseDelta.x;
         m_panY += io.MouseDelta.y;
     }
 
     // ── Drawing ───────────────────────────────────────────────────────────────
-    if (inCanvas && !spaceHeld && !io.MouseDown[2]) {
+    if (inCanvas && !spaceHeld && !io.MouseDown[2] && !popupOpen) {
         float relX = (mp.x - originX) / canvasW;
         float relY = (mp.y - originY) / canvasH;
         int px = (int)(relX * cw);
@@ -153,7 +193,6 @@ void CanvasPanel::render() {
         if (tool) {
             int fi = m_timeline->currentFrame();
             if (io.MouseClicked[0]) {
-                // Snapshot BEFORE drawing starts
                 m_toolManager->snapshotBefore(*m_document, fi);
                 tool->onPress(*m_document, fi, e);
             } else if (io.MouseDown[0]) {
@@ -164,8 +203,14 @@ void CanvasPanel::render() {
         }
     }
 
+    // Cursor hint
     if (spaceHeld && inWindow)
         ImGui::SetMouseCursor(ImGuiMouseCursor_ResizeAll);
+
+    // Zoom level display
+    dl->AddText({panelPos.x + 4, panelPos.y + panelSize.y - 20},
+                IM_COL32(150,150,150,200),
+                (std::to_string((int)(m_zoom * 100)) + "%").c_str());
 
     ImGui::End();
 }

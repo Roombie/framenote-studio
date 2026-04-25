@@ -40,6 +40,9 @@
     <ClCompile Include="C:\framenote-studio\src\tools\FillTool.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="C:\framenote-studio\src\tools\EyedropperTool.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
     <ClCompile Include="C:\framenote-studio\src\renderer\CanvasRenderer.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>

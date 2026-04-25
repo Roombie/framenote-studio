@@ -5,6 +5,8 @@
 #include "ui/PalettePanel.h"
 #include <imgui.h>
 #include <cstring>
+#include "io/FileDialog.h"
+#include "io/FileManager.h"
 
 namespace Framenote {
 
@@ -158,7 +160,17 @@ void TabManager::renderHomeTab(ToolManager& toolManager) {
 
     ImGui::SetCursorPos({centerX - 120, startY + 140});
     if (ImGui::Button("  Open File...  ", {240, 40})) {
-        // TODO: open file dialog
+        std::string path = FileDialog::openFile(
+            "Framenote Files\0*.framenote\0All Files\0*.*\0",
+            "Open Framenote File");
+        if (!path.empty()) {
+            std::string err;
+            auto doc = FileManager::load(path, err);
+            if (doc) {
+                std::string name = path.substr(path.find_last_of("/\\") + 1);
+                openDocument(std::move(doc), name, path);
+            }
+        }
     }
 
     ImGui::SetCursorPos({centerX - 120, startY + 210});

@@ -11,6 +11,7 @@ C:\framenote-studio\src\tools\ToolManager.cpp;C:\framenote-studio\build\Framenot
 C:\framenote-studio\src\tools\PencilTool.cpp;C:\framenote-studio\build\FramenoteStudio.dir\Debug\PencilTool.obj
 C:\framenote-studio\src\tools\EraserTool.cpp;C:\framenote-studio\build\FramenoteStudio.dir\Debug\EraserTool.obj
 C:\framenote-studio\src\tools\FillTool.cpp;C:\framenote-studio\build\FramenoteStudio.dir\Debug\FillTool.obj
+C:\framenote-studio\src\tools\EyedropperTool.cpp;C:\framenote-studio\build\FramenoteStudio.dir\Debug\EyedropperTool.obj
 C:\framenote-studio\src\renderer\CanvasRenderer.cpp;C:\framenote-studio\build\FramenoteStudio.dir\Debug\CanvasRenderer.obj
 C:\framenote-studio\src\ui\MainWindow.cpp;C:\framenote-studio\build\FramenoteStudio.dir\Debug\MainWindow.obj
 C:\framenote-studio\src\ui\TimelinePanel.cpp;C:\framenote-studio\build\FramenoteStudio.dir\Debug\TimelinePanel.obj

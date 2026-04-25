@@ -26,6 +26,7 @@ set(SOURCES
     src/tools/PencilTool.cpp
     src/tools/EraserTool.cpp
     src/tools/FillTool.cpp
+    src/tools/EyedropperTool.cpp
 
     # Renderer
     src/renderer/CanvasRenderer.cpp
