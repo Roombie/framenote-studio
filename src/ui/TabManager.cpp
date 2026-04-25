@@ -1,10 +1,11 @@
-#include "ui/TabManager.h"
+﻿#include "ui/TabManager.h"
 #include "ui/CanvasPanel.h"
 #include "ui/TimelinePanel.h"
 #include "ui/ToolsPanel.h"
 #include "ui/PalettePanel.h"
 #include <imgui.h>
 #include <cstring>
+#include <SDL3/SDL.h>
 #include "io/FileDialog.h"
 #include "io/FileManager.h"
 
@@ -17,13 +18,15 @@ TabManager::TabManager(SDL_Renderer* renderer)
 void TabManager::render(ToolManager& toolManager) {
     renderTabBar();
 
+    // Route rendering to home or the active document tab
     if (m_activeIndex == -1) {
         renderHomeTab(toolManager);
     } else if (m_activeIndex < (int)m_tabs.size()) {
         renderDocumentTab(*m_tabs[m_activeIndex], toolManager);
     }
 
-    // New document dialog
+    // New document dialog — opened via flag so it can be triggered from
+    // multiple places (Home button, File menu) without calling OpenPopup twice
     if (m_showNewDialog) {
         ImGui::OpenPopup("New Document##dlg");
         m_showNewDialog = false;
@@ -42,6 +45,7 @@ void TabManager::render(ToolManager& toolManager) {
         ImGui::SetNextItemWidth(120);
         ImGui::InputInt("H##new", &m_newDocH);
 
+        // Clamp to sane limits
         if (m_newDocW <    1) m_newDocW =    1;
         if (m_newDocH <    1) m_newDocH =    1;
         if (m_newDocW > 4096) m_newDocW = 4096;
@@ -76,16 +80,20 @@ void TabManager::render(ToolManager& toolManager) {
 
 void TabManager::renderTabBar() {
     ImGuiStyle& style = ImGui::GetStyle();
+    ImGuiIO& io = ImGui::GetIO();
 
-    // Full-width tab bar at the top
+    // Full-width fixed tab bar sits between the menu bar and the content area
     ImGui::SetNextWindowPos({0, ImGui::GetFrameHeight()}, ImGuiCond_Always);
-    ImGui::SetNextWindowSize({ImGui::GetIO().DisplaySize.x, 32}, ImGuiCond_Always);
+    ImGui::SetNextWindowSize({io.DisplaySize.x, 32}, ImGuiCond_Always);
     ImGui::Begin("##TabBar", nullptr,
         ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoResize |
         ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoScrollbar |
         ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_NoBringToFrontOnFocus);
 
-    // Home tab
+    // We draw the ghost tab and drop indicator directly onto the window drawlist
+    ImDrawList* dl = ImGui::GetWindowDrawList();
+
+    // Home tab — always first, never draggable
     bool homeActive = (m_activeIndex == -1);
     if (homeActive)
         ImGui::PushStyleColor(ImGuiCol_Button, style.Colors[ImGuiCol_ButtonActive]);
@@ -94,45 +102,146 @@ void TabManager::renderTabBar() {
     if (homeActive)
         ImGui::PopStyleColor();
 
-    // Document tabs
+    // Record the right edge of the Home tab — used as the minimum boundary
+    // during drag so document tabs can never be reordered before Home
+    float homeRightEdge = ImGui::GetItemRectMax().x + 4;
+
+    // Collect screen-space rects of all document tabs for drop-target math
+    struct TabRect { float x, w; };
+    std::vector<TabRect> tabRects;
+
+    // ── Document tabs ─────────────────────────────────────────────────────────
     for (int i = 0; i < (int)m_tabs.size(); ++i) {
         ImGui::SameLine();
-        bool active = (m_activeIndex == i);
-        if (active)
+
+        bool active   = (m_activeIndex == i);
+        bool dragging = (m_draggingTab == i);
+
+        // Semi-transparent style while this tab is being dragged —
+        // the ghost follows the cursor, this "source" stays in place dimmed
+        if (dragging)
+            ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.2f,0.5f,0.9f,0.4f));
+        else if (active)
             ImGui::PushStyleColor(ImGuiCol_Button, style.Colors[ImGuiCol_ButtonActive]);
 
-        // Tab label with close button
         std::string label = m_tabs[i]->name;
-        if (m_tabs[i]->document->isDirty()) label += " *";
-        label += "##tab" + std::to_string(i);
+        if (m_tabs[i]->document->isDirty()) label += " *"; // unsaved indicator
+        label += "##tab" + std::to_string(i);              // unique ImGui ID
 
-        if (ImGui::Button(label.c_str()))
-            m_activeIndex = i;
+        float tabX = ImGui::GetCursorScreenPos().x;
+        ImGui::Button(label.c_str());
+        float tabW = ImGui::GetItemRectSize().x;
+        tabRects.push_back({tabX, tabW});
 
-        if (active)
+        if (dragging || active)
             ImGui::PopStyleColor();
 
-        // Close button
+        // Switch to this tab on click
+        if (ImGui::IsItemClicked(ImGuiMouseButton_Left))
+            m_activeIndex = i;
+
+        // Begin dragging after moving 4px — prevents accidental drags on clicks
+        if (ImGui::IsItemActive() && ImGui::IsMouseDragging(ImGuiMouseButton_Left, 4.0f)) {
+            if (m_draggingTab < 0)
+                m_draggingTab = i;
+        }
+
+        // Close button (invisible background so it blends with the tab bar)
         ImGui::SameLine();
         std::string closeId = "x##close" + std::to_string(i);
         ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0,0,0,0));
         if (ImGui::SmallButton(closeId.c_str())) {
             if (m_tabs[i]->document->isDirty()) {
+                // Defer actual close until user confirms in the dialog
                 m_pendingCloseIndex = i;
                 ImGui::OpenPopup("Unsaved Changes##close");
             } else {
                 m_tabs.erase(m_tabs.begin() + i);
                 if (m_activeIndex >= (int)m_tabs.size())
                     m_activeIndex = m_tabs.empty() ? -1 : (int)m_tabs.size() - 1;
+                if (m_draggingTab >= (int)m_tabs.size())
+                    m_draggingTab = -1;
                 ImGui::PopStyleColor();
                 ImGui::End();
-                return;
+                return; // Early return — tab vector mutated, restart next frame
             }
         }
         ImGui::PopStyleColor();
     }
 
-    // Unsaved changes dialog for tab close
+    // ── Drag-and-drop reordering ──────────────────────────────────────────────
+    if (m_draggingTab >= 0 && m_draggingTab < (int)m_tabs.size()) {
+        float mouseX = io.MousePos.x;
+
+        // Draw a ghost tab following the cursor using Nibbit blue
+        std::string ghostLabel = m_tabs[m_draggingTab]->name;
+        if (m_tabs[m_draggingTab]->document->isDirty()) ghostLabel += " *";
+        ImVec2 textSize = ImGui::CalcTextSize(ghostLabel.c_str());
+        float ghostW = textSize.x + 16;
+        float ghostX = mouseX - ghostW * 0.5f;
+        float ghostY = ImGui::GetWindowPos().y + 4;
+        dl->AddRectFilled({ghostX, ghostY}, {ghostX + ghostW, ghostY + 24},
+                          IM_COL32(44, 184, 213, 180), 4.f);
+        dl->AddText({ghostX + 8, ghostY + 4}, IM_COL32(255,255,255,255),
+                    ghostLabel.c_str());
+
+        // Find which tab slot the cursor has crossed into.
+        // We compare mouseX against each tab's midpoint, only allowing
+        // leftward drops at positions that are right of homeRightEdge
+        // Find the correct drop slot by scanning all tabs.
+        // For rightward drag: find the rightmost tab whose midpoint cursor passed.
+        // For leftward drag: find the leftmost tab whose midpoint cursor passed.
+        int dropTarget = m_draggingTab;
+
+        if (mouseX > tabRects[m_draggingTab].x + tabRects[m_draggingTab].w * 0.5f) {
+            // Dragging RIGHT — find rightmost tab whose midpoint we've crossed
+            for (int j = m_draggingTab + 1; j < (int)tabRects.size(); ++j) {
+                float mid = tabRects[j].x + tabRects[j].w * 0.5f;
+                if (mouseX > mid)
+                    dropTarget = j;
+            }
+        } else {
+            // Dragging LEFT — find leftmost tab whose midpoint we've crossed
+            // respecting the home tab boundary
+            for (int j = m_draggingTab - 1; j >= 0; --j) {
+                float mid = tabRects[j].x + tabRects[j].w * 0.5f;
+                if (mouseX < mid && tabRects[j].x >= homeRightEdge)
+                    dropTarget = j;
+            }
+        }
+
+        // Draw a vertical blue line showing the drop position
+        if (dropTarget != m_draggingTab && dropTarget >= 0
+                && dropTarget < (int)tabRects.size()) {
+            float lineX = (dropTarget < m_draggingTab)
+                ? tabRects[dropTarget].x
+                : tabRects[dropTarget].x + tabRects[dropTarget].w;
+            float lineY = ImGui::GetWindowPos().y;
+            dl->AddLine({lineX, lineY + 2}, {lineX, lineY + 30},
+                        IM_COL32(44, 184, 213, 255), 2.f);
+        }
+
+        // On mouse release — perform the reorder
+        if (ImGui::IsMouseReleased(ImGuiMouseButton_Left)) {
+            if (dropTarget != m_draggingTab && dropTarget >= 0
+                    && dropTarget < (int)m_tabs.size()) {
+                auto tab = std::move(m_tabs[m_draggingTab]);
+                m_tabs.erase(m_tabs.begin() + m_draggingTab);
+                // Adjust insertAt because erasing shifts all indices after it
+                int insertAt = dropTarget;
+                if (dropTarget > m_draggingTab) insertAt--;
+                if (insertAt < 0) insertAt = 0;
+                if (insertAt > (int)m_tabs.size()) insertAt = (int)m_tabs.size();
+                m_tabs.insert(m_tabs.begin() + insertAt, std::move(tab));
+                m_activeIndex = insertAt;
+            }
+            m_draggingTab = -1;
+        }
+    } else if (ImGui::IsMouseReleased(ImGuiMouseButton_Left)) {
+        m_draggingTab = -1;
+    }
+
+    // ── Unsaved changes confirmation dialog ───────────────────────────────────
     if (ImGui::BeginPopupModal("Unsaved Changes##close", nullptr,
             ImGuiWindowFlags_AlwaysAutoResize)) {
         if (m_pendingCloseIndex >= 0 && m_pendingCloseIndex < (int)m_tabs.size())
@@ -161,6 +270,7 @@ void TabManager::renderHomeTab(ToolManager& toolManager) {
     ImGuiIO& io = ImGui::GetIO();
     float tabBarH = ImGui::GetFrameHeight() + 32;
 
+    // Home covers the full area below the tab bar
     ImGui::SetNextWindowPos({0, tabBarH}, ImGuiCond_Always);
     ImGui::SetNextWindowSize({io.DisplaySize.x, io.DisplaySize.y - tabBarH}, ImGuiCond_Always);
     ImGui::SetNextWindowBgAlpha(1.0f);
@@ -170,7 +280,7 @@ void TabManager::renderHomeTab(ToolManager& toolManager) {
         ImGuiWindowFlags_NoBringToFrontOnFocus |
         ImGuiWindowFlags_NoScrollbar);
 
-    // Center content
+    // Center the content horizontally
     float centerX = io.DisplaySize.x * 0.5f;
     float startY  = io.DisplaySize.y * 0.25f - tabBarH;
 
@@ -182,9 +292,10 @@ void TabManager::renderHomeTab(ToolManager& toolManager) {
 
     ImGui::SetCursorPos({centerX - 120, startY + 90});
     if (ImGui::Button("  New Document  ", {240, 40})) {
+        // Reset dialog values to defaults before opening
         m_showNewDialog = true;
-        m_newDocW = 128;
-        m_newDocH = 128;
+        m_newDocW   = 128;
+        m_newDocH   = 128;
         m_newDocFps = 8;
         strncpy(m_newDocName, "untitled", sizeof(m_newDocName));
     }
@@ -209,7 +320,7 @@ void TabManager::renderHomeTab(ToolManager& toolManager) {
     ImGui::SetCursorPos({centerX - 120, startY + 230});
     ImGui::TextDisabled("(No recent files)");
 
-    // Made by + socials at the bottom
+    // Social links anchored to the bottom of the home screen
     float socialY = io.DisplaySize.y - tabBarH - 60;
     ImGui::SetCursorPos({centerX - 120, socialY});
     ImGui::TextDisabled("Made by Roombie");
@@ -227,9 +338,9 @@ void TabManager::renderHomeTab(ToolManager& toolManager) {
 }
 
 void TabManager::renderDocumentTab(DocumentTab& tab, ToolManager& toolManager) {
-    float tabBarH = ImGui::GetFrameHeight() + 32;
-
-    // Pass tab's own document/timeline/renderer to panels
+    // Each tab has its own independent Document, Timeline, History and
+    // CanvasRenderer. Zoom/pan state also lives in DocumentTab so it
+    // persists when switching between tabs.
     ToolsPanel(&toolManager).render();
     PalettePanel(tab.document.get()).render();
     TimelinePanel(tab.document.get(), tab.timeline.get()).render();
@@ -250,15 +361,11 @@ DocumentTab* TabManager::activeTab() {
     return m_tabs[m_activeIndex].get();
 }
 
-} // namespace Framenote
-
-// Additional method implementations
-
-namespace Framenote {
-
 void TabManager::openDocument(std::unique_ptr<Document> doc,
                                const std::string& name,
                                const std::string& path) {
+    // Build a fully initialized tab from a loaded document.
+    // The renderer size matches the document's canvas size at load time.
     auto tab = std::make_unique<DocumentTab>();
     tab->name     = name;
     tab->document = std::move(doc);
@@ -273,10 +380,6 @@ void TabManager::openDocument(std::unique_ptr<Document> doc,
     m_tabs.push_back(std::move(tab));
     m_activeIndex = (int)m_tabs.size() - 1;
 }
-
-} // namespace Framenote
-
-namespace Framenote {
 
 bool TabManager::hasUnsavedTabs() const {
     for (const auto& tab : m_tabs)

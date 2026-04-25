@@ -40,6 +40,7 @@ private:
     std::vector<std::unique_ptr<DocumentTab>> m_tabs;
     int                                       m_activeIndex       = -1;
     int                                       m_pendingCloseIndex = -1;
+    int                                       m_draggingTab       = -1;
 
     bool m_showNewDialog  = false;
     int  m_newDocW        = 128;
