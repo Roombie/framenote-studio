@@ -6,20 +6,17 @@
 #include <memory>
 #include <string>
 
-#include "core/Document.h"
-#include "core/Timeline.h"
-#include "tools/ToolManager.h"
-#include "renderer/CanvasRenderer.h"
+#include "ui/Theme.h"
 #include "ui/MainWindow.h"
+#include "ui/TabManager.h"
+#include "tools/ToolManager.h"
 
-// â”€â”€ Constants â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-static constexpr int   WINDOW_W     = 1280;
-static constexpr int   WINDOW_H     = 800;
-static constexpr float TARGET_FPS   = 60.0f;
-static constexpr float FRAME_TIME   = 1.0f / TARGET_FPS;
+static constexpr int   WINDOW_W   = 1280;
+static constexpr int   WINDOW_H   = 800;
 
 int main(int argc, char* argv[]) {
-    // â”€â”€ SDL2 Init â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+    (void)argc; (void)argv;
+
     if (!SDL_Init(SDL_INIT_VIDEO)) {
         SDL_Log("SDL_Init failed: %s", SDL_GetError());
         return 1;
@@ -44,76 +41,43 @@ int main(int argc, char* argv[]) {
         return 1;
     }
 
-    // VSync on by default in SDL3
     SDL_SetRenderVSync(renderer, 1);
-    // SDL3: ensure logical size matches window size for correct mouse coords
-    SDL_SetRenderLogicalPresentation(renderer, WINDOW_W, WINDOW_H, SDL_LOGICAL_PRESENTATION_DISABLED);
-    SDL_SetWindowRelativeMouseMode(window, false);
 
-    // â”€â”€ Dear ImGui Init â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+    // ── Dear ImGui ────────────────────────────────────────────────────────────
     IMGUI_CHECKVERSION();
     ImGui::CreateContext();
     ImGuiIO& io = ImGui::GetIO();
-    (void)io; // suppress unused warning
+    io.IniFilename = "imgui.ini";
+    (void)io;
 
-    ImGui::StyleColorsDark();
-
-    ImGui_ImplSDL3_InitForSDLRenderer(window, renderer);
-    // Fix DPI scaling: scale ImGui to match display
+    // DPI fix
     float dpiScale = SDL_GetWindowDisplayScale(window);
     ImGui::GetStyle().ScaleAllSizes(dpiScale);
-    ImGuiIO& ioRef = ImGui::GetIO();
-    ioRef.FontGlobalScale = dpiScale;
+    ImGui::GetIO().FontGlobalScale = dpiScale;
+
+    // Apply Framenote dark theme
+    Framenote::Theme::applyDark();
+
+    ImGui_ImplSDL3_InitForSDLRenderer(window, renderer);
     ImGui_ImplSDLRenderer3_Init(renderer);
 
-    // â”€â”€ App State â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-    auto document = std::make_unique<Framenote::Document>(128, 128);
-    document->addFrame();   // Start with one blank frame
-
-    Framenote::Timeline    timeline;
-    timeline.setFrameCount(document->frameCount());
-
+    // ── App state ─────────────────────────────────────────────────────────────
     Framenote::ToolManager toolManager;
+    Framenote::TabManager  tabManager(renderer);
+    Framenote::MainWindow  mainWindow(&tabManager, &toolManager);
 
-    auto canvasRenderer = std::make_unique<Framenote::CanvasRenderer>(
-        renderer,
-        document->canvasSize().width,
-        document->canvasSize().height
-    );
-
-    Framenote::MainWindow mainWindow(
-        document.get(),
-        &timeline,
-        &toolManager,
-        canvasRenderer.get()
-    );
-
-    // â”€â”€ Main Loop â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-    bool     running  = true;
-    uint64_t lastTime = SDL_GetPerformanceCounter();
-
+    // ── Main loop ─────────────────────────────────────────────────────────────
+    bool running = true;
     while (running) {
-        // Delta time
-        uint64_t now   = SDL_GetPerformanceCounter();
-        float deltaTime = static_cast<float>(now - lastTime) /
-                          static_cast<float>(SDL_GetPerformanceFrequency());
-        lastTime = now;
-
-        // â”€â”€ Events â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
         SDL_Event event;
         while (SDL_PollEvent(&event)) {
             ImGui_ImplSDL3_ProcessEvent(&event);
             if (event.type == SDL_EVENT_QUIT) running = false;
             if (event.type == SDL_EVENT_WINDOW_CLOSE_REQUESTED &&
-                event.window.windowID == SDL_GetWindowID(window)) {
+                event.window.windowID == SDL_GetWindowID(window))
                 running = false;
-            }
         }
 
-        // â”€â”€ Tick timeline â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-        timeline.tick(deltaTime);
-
-        // â”€â”€ ImGui Frame â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
         ImGui_ImplSDLRenderer3_NewFrame();
         ImGui_ImplSDL3_NewFrame();
         ImGui::NewFrame();
@@ -122,25 +86,22 @@ int main(int argc, char* argv[]) {
 
         ImGui::Render();
 
-        // â”€â”€ SDL Render â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-        SDL_SetRenderDrawColor(renderer, 20, 20, 20, 255);
+        // SDL clear color matches theme
+        if (Framenote::Theme::current() == Framenote::ThemeMode::Dark)
+            SDL_SetRenderDrawColor(renderer, 20, 18, 16, 255);
+        else
+            SDL_SetRenderDrawColor(renderer, 248, 246, 240, 255);
+
         SDL_RenderClear(renderer);
         ImGui_ImplSDLRenderer3_RenderDrawData(ImGui::GetDrawData(), renderer);
         SDL_RenderPresent(renderer);
     }
 
-    // â”€â”€ Cleanup â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     ImGui_ImplSDLRenderer3_Shutdown();
     ImGui_ImplSDL3_Shutdown();
     ImGui::DestroyContext();
     SDL_DestroyRenderer(renderer);
     SDL_DestroyWindow(window);
     SDL_Quit();
-
     return 0;
 }
-
-
-
-
-

@@ -8,6 +8,8 @@ PalettePanel::PalettePanel(Document* document)
 {}
 
 void PalettePanel::render() {
+    ImGui::SetNextWindowPos({4, 30}, ImGuiCond_FirstUseEver);
+    ImGui::SetNextWindowSize({175, 300}, ImGuiCond_FirstUseEver);
     ImGui::Begin("Palette");
 
     Palette& palette = m_document->palette();

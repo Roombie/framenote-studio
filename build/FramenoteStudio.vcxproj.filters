@@ -19,6 +19,12 @@
     <ClCompile Include="C:\framenote-studio\src\core\Timeline.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="C:\framenote-studio\src\core\History.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\framenote-studio\src\core\DocumentTab.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
     <ClCompile Include="C:\framenote-studio\src\core\Palette.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
@@ -46,6 +52,12 @@
     <ClCompile Include="C:\framenote-studio\src\ui\ToolsPanel.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="C:\framenote-studio\src\ui\Theme.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\framenote-studio\src\ui\TabManager.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
     <ClCompile Include="C:\framenote-studio\src\ui\PalettePanel.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
@@ -56,6 +68,12 @@
       <Filter>Source Files</Filter>
     </ClCompile>
     <ClCompile Include="C:\framenote-studio\src\io\GifExporter.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\framenote-studio\src\io\PngExporter.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\framenote-studio\src\io\FileDialog.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
     <ClCompile Include="C:\framenote-studio\third_party\imgui\imgui.cpp">

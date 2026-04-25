@@ -1,35 +1,30 @@
 #pragma once
 
-#include "core/Document.h"
-#include "core/Timeline.h"
+#include "ui/TabManager.h"
 #include "tools/ToolManager.h"
-#include "renderer/CanvasRenderer.h"
 #include <string>
 
 namespace Framenote {
 
 class MainWindow {
 public:
-    MainWindow(Document*       document,
-               Timeline*       timeline,
-               ToolManager*    toolManager,
-               CanvasRenderer* canvasRenderer);
-
+    MainWindow(TabManager* tabManager, ToolManager* toolManager);
     void render();
 
 private:
     void renderMenuBar();
-    void renderDockspace();
     void renderCanvasSizeDialog();
+    void renderExportDialog();
 
-    Document*       m_document;
-    Timeline*       m_timeline;
-    ToolManager*    m_toolManager;
-    CanvasRenderer* m_canvasRenderer;
+    enum class ExportType { GIF, PNG, PNGSequence };
 
-    // Modal state
+    TabManager*  m_tabManager;
+    ToolManager* m_toolManager;
+
     bool        m_showAbout            = false;
     bool        m_showCanvasSizeDialog = false;
+    bool        m_showExportDialog     = false;
+    ExportType  m_exportType           = ExportType::GIF;
     int         m_newCanvasW           = 128;
     int         m_newCanvasH           = 128;
     std::string m_statusMsg;

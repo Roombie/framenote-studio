@@ -342,6 +342,8 @@ if %errorlevel% neq 0 goto :VCEnd</Command>
     <ClCompile Include="C:\framenote-studio\src\core\Layer.cpp" />
     <ClCompile Include="C:\framenote-studio\src\core\Canvas.cpp" />
     <ClCompile Include="C:\framenote-studio\src\core\Timeline.cpp" />
+    <ClCompile Include="C:\framenote-studio\src\core\History.cpp" />
+    <ClCompile Include="C:\framenote-studio\src\core\DocumentTab.cpp" />
     <ClCompile Include="C:\framenote-studio\src\core\Palette.cpp" />
     <ClCompile Include="C:\framenote-studio\src\tools\ToolManager.cpp" />
     <ClCompile Include="C:\framenote-studio\src\tools\PencilTool.cpp" />
@@ -351,10 +353,14 @@ if %errorlevel% neq 0 goto :VCEnd</Command>
     <ClCompile Include="C:\framenote-studio\src\ui\MainWindow.cpp" />
     <ClCompile Include="C:\framenote-studio\src\ui\TimelinePanel.cpp" />
     <ClCompile Include="C:\framenote-studio\src\ui\ToolsPanel.cpp" />
+    <ClCompile Include="C:\framenote-studio\src\ui\Theme.cpp" />
+    <ClCompile Include="C:\framenote-studio\src\ui\TabManager.cpp" />
     <ClCompile Include="C:\framenote-studio\src\ui\PalettePanel.cpp" />
     <ClCompile Include="C:\framenote-studio\src\ui\CanvasPanel.cpp" />
     <ClCompile Include="C:\framenote-studio\src\io\FileManager.cpp" />
     <ClCompile Include="C:\framenote-studio\src\io\GifExporter.cpp" />
+    <ClCompile Include="C:\framenote-studio\src\io\PngExporter.cpp" />
+    <ClCompile Include="C:\framenote-studio\src\io\FileDialog.cpp" />
     <ClCompile Include="C:\framenote-studio\third_party\imgui\imgui.cpp" />
     <ClCompile Include="C:\framenote-studio\third_party\imgui\imgui_draw.cpp" />
     <ClCompile Include="C:\framenote-studio\third_party\imgui\imgui_tables.cpp" />

@@ -8,6 +8,8 @@ TimelinePanel::TimelinePanel(Document* document, Timeline* timeline)
 {}
 
 void TimelinePanel::render() {
+    ImGui::SetNextWindowPos({4, ImGui::GetIO().DisplaySize.y - 160}, ImGuiCond_FirstUseEver);
+    ImGui::SetNextWindowSize({ImGui::GetIO().DisplaySize.x - 8, 155}, ImGuiCond_FirstUseEver);
     ImGuiWindowFlags flags = ImGuiWindowFlags_NoScrollbar;
     ImGui::Begin("Timeline", nullptr, flags);
 

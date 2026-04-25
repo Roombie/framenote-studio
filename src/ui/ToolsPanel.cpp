@@ -8,6 +8,9 @@ ToolsPanel::ToolsPanel(ToolManager* toolManager)
 {}
 
 void ToolsPanel::render() {
+    ImGui::SetNextWindowPos({ImGui::GetIO().DisplaySize.x - 60, 30},
+                             ImGuiCond_FirstUseEver);
+    ImGui::SetNextWindowSize({50, 200}, ImGuiCond_FirstUseEver);
     ImGui::Begin("Tools");
 
     struct ToolBtn { ToolType type; const char* icon; const char* tooltip; };

@@ -17,6 +17,8 @@ set(SOURCES
     src/core/Layer.cpp
     src/core/Canvas.cpp
     src/core/Timeline.cpp
+    src/core/History.cpp
+    src/core/DocumentTab.cpp
     src/core/Palette.cpp
 
     # Tools
@@ -32,12 +34,16 @@ set(SOURCES
     src/ui/MainWindow.cpp
     src/ui/TimelinePanel.cpp
     src/ui/ToolsPanel.cpp
+    src/ui/Theme.cpp
+    src/ui/TabManager.cpp
     src/ui/PalettePanel.cpp
     src/ui/CanvasPanel.cpp
 
     # I/O
     src/io/FileManager.cpp
     src/io/GifExporter.cpp
+    src/io/PngExporter.cpp
+    src/io/FileDialog.cpp
 
     # Dear ImGui (vendored)
     third_party/imgui/imgui.cpp

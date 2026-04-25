@@ -3,12 +3,12 @@
 #include <memory>
 #include <unordered_map>
 #include "core/Document.h"
+#include "core/History.h"
 
 namespace Framenote {
 
-// ── Tool input event (no SDL dependency) ──────────────────────────────────────
 struct ToolEvent {
-    float canvasX;    // pixel coordinate on the canvas
+    float canvasX;
     float canvasY;
     bool  leftDown;
     bool  rightDown;
@@ -21,32 +21,35 @@ enum class ToolType {
     Eyedropper,
 };
 
-// ── Abstract base tool ────────────────────────────────────────────────────────
 class Tool {
 public:
     virtual ~Tool() = default;
-
-    virtual ToolType type() const = 0;
+    virtual ToolType    type() const = 0;
     virtual const char* name() const = 0;
-
-    // Called on mouse press, drag, and release respectively
     virtual void onPress  (Document& doc, int frameIndex, const ToolEvent& e) {}
     virtual void onDrag   (Document& doc, int frameIndex, const ToolEvent& e) {}
     virtual void onRelease(Document& doc, int frameIndex, const ToolEvent& e) {}
 };
 
-// ── Tool manager ──────────────────────────────────────────────────────────────
 class ToolManager {
 public:
-    ToolManager();   // Registers all built-in tools
+    ToolManager();
 
     void       selectTool(ToolType type);
     Tool*      activeTool();
     ToolType   activeToolType() const { return m_activeType; }
 
+    // History access — CanvasPanel uses this for undo/redo
+    History&       history()       { return m_history; }
+    const History& history() const { return m_history; }
+
+    // Called by CanvasPanel before onPress to snapshot current frame
+    void snapshotBefore(Document& doc, int frameIndex);
+
 private:
     std::unordered_map<ToolType, std::unique_ptr<Tool>> m_tools;
     ToolType m_activeType = ToolType::Pencil;
+    History  m_history;
 };
 
 } // namespace Framenote
