@@ -13,7 +13,10 @@ public:
     CanvasPanel(Document*       document,
                 Timeline*       timeline,
                 ToolManager*    toolManager,
-                CanvasRenderer* renderer);
+                CanvasRenderer* renderer,
+                float&          zoom,
+                float&          panX,
+                float&          panY);
 
     void render();
 
@@ -25,10 +28,9 @@ private:
     ToolManager*    m_toolManager;
     CanvasRenderer* m_renderer;
 
-    float m_zoom  = 4.0f;
-    float m_panX  = 0.0f;
-    float m_panY  = 0.0f;
-    bool  m_isPanning = false;
+    float& m_zoom;
+    float& m_panX;
+    float& m_panY;
 };
 
 } // namespace Framenote

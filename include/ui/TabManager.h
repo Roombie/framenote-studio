@@ -22,6 +22,7 @@ public:
     // Active document tab (nullptr if home is active)
     DocumentTab* activeTab();
     void         openDocument(std::unique_ptr<Document> doc, const std::string& name, const std::string& path);
+    bool         hasUnsavedTabs() const;
     void         showNewDialog() { m_showNewDialog = true; strncpy(m_newDocName, "untitled", sizeof(m_newDocName)); }
     bool         isHomeActive() const { return m_activeIndex == -1; }
 
@@ -33,6 +34,7 @@ private:
     SDL_Renderer*                            m_sdlRenderer;
     std::vector<std::unique_ptr<DocumentTab>> m_tabs;
     int                                       m_activeIndex = -1; // -1 = home
+    int                                       m_pendingCloseIndex = -1;
 
     // New document dialog state (moved here from MainWindow)
     bool        m_showNewDialog = false;

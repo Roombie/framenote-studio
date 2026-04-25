@@ -9,17 +9,20 @@
 
 namespace Framenote {
 
-// A DocumentTab owns everything needed for one open document
 struct DocumentTab {
-    std::string              name;           // display name in tab
-    std::unique_ptr<Document>      document;
-    std::unique_ptr<Timeline>      timeline;
-    std::unique_ptr<History>       history;
-    std::unique_ptr<CanvasRenderer> renderer;
+    std::string                      name;
+    std::unique_ptr<Document>        document;
+    std::unique_ptr<Timeline>        timeline;
+    std::unique_ptr<History>         history;
+    std::unique_ptr<CanvasRenderer>  renderer;
 
-    bool requestClose = false; // set true when user clicks X on tab
+    bool requestClose = false;
 
-    // Create a blank document tab
+    // Canvas view state — persisted across frames
+    float canvasZoom = 4.0f;
+    float canvasPanX = 0.0f;
+    float canvasPanY = 0.0f;
+
     static std::unique_ptr<DocumentTab> createBlank(
         SDL_Renderer* sdlRenderer,
         const std::string& name = "untitled",

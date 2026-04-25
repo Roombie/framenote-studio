@@ -117,14 +117,41 @@ void TabManager::renderTabBar() {
         std::string closeId = "x##close" + std::to_string(i);
         ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0,0,0,0));
         if (ImGui::SmallButton(closeId.c_str())) {
-            m_tabs.erase(m_tabs.begin() + i);
-            if (m_activeIndex >= (int)m_tabs.size())
-                m_activeIndex = m_tabs.empty() ? -1 : (int)m_tabs.size() - 1;
-            ImGui::PopStyleColor();
-            ImGui::End();
-            return;
+            if (m_tabs[i]->document->isDirty()) {
+                m_pendingCloseIndex = i;
+                ImGui::OpenPopup("Unsaved Changes##close");
+            } else {
+                m_tabs.erase(m_tabs.begin() + i);
+                if (m_activeIndex >= (int)m_tabs.size())
+                    m_activeIndex = m_tabs.empty() ? -1 : (int)m_tabs.size() - 1;
+                ImGui::PopStyleColor();
+                ImGui::End();
+                return;
+            }
         }
         ImGui::PopStyleColor();
+    }
+
+    // Unsaved changes dialog for tab close
+    if (ImGui::BeginPopupModal("Unsaved Changes##close", nullptr,
+            ImGuiWindowFlags_AlwaysAutoResize)) {
+        if (m_pendingCloseIndex >= 0 && m_pendingCloseIndex < (int)m_tabs.size())
+            ImGui::Text("'%s' has unsaved changes. Close anyway?",
+                m_tabs[m_pendingCloseIndex]->name.c_str());
+        ImGui::Separator();
+        if (ImGui::Button("Close without saving", {180, 0})) {
+            m_tabs.erase(m_tabs.begin() + m_pendingCloseIndex);
+            if (m_activeIndex >= (int)m_tabs.size())
+                m_activeIndex = m_tabs.empty() ? -1 : (int)m_tabs.size() - 1;
+            m_pendingCloseIndex = -1;
+            ImGui::CloseCurrentPopup();
+        }
+        ImGui::SameLine();
+        if (ImGui::Button("Cancel", {80, 0})) {
+            m_pendingCloseIndex = -1;
+            ImGui::CloseCurrentPopup();
+        }
+        ImGui::EndPopup();
     }
 
     ImGui::End();
@@ -189,7 +216,8 @@ void TabManager::renderDocumentTab(DocumentTab& tab, ToolManager& toolManager) {
     PalettePanel(tab.document.get()).render();
     TimelinePanel(tab.document.get(), tab.timeline.get()).render();
     CanvasPanel(tab.document.get(), tab.timeline.get(),
-                &toolManager, tab.renderer.get()).render();
+                &toolManager, tab.renderer.get(),
+                tab.canvasZoom, tab.canvasPanX, tab.canvasPanY).render();
 }
 
 void TabManager::newDocument(const std::string& name, int w, int h, int fps) {
@@ -226,6 +254,16 @@ void TabManager::openDocument(std::unique_ptr<Document> doc,
         tab->document->canvasSize().height);
     m_tabs.push_back(std::move(tab));
     m_activeIndex = (int)m_tabs.size() - 1;
+}
+
+} // namespace Framenote
+
+namespace Framenote {
+
+bool TabManager::hasUnsavedTabs() const {
+    for (const auto& tab : m_tabs)
+        if (tab->document->isDirty()) return true;
+    return false;
 }
 
 } // namespace Framenote

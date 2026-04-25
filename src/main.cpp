@@ -43,7 +43,7 @@ int main(int argc, char* argv[]) {
 
     SDL_SetRenderVSync(renderer, 1);
 
-    // ── Dear ImGui ────────────────────────────────────────────────────────────
+    // â”€â”€ Dear ImGui â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     IMGUI_CHECKVERSION();
     ImGui::CreateContext();
     ImGuiIO& io = ImGui::GetIO();
@@ -61,20 +61,32 @@ int main(int argc, char* argv[]) {
     ImGui_ImplSDL3_InitForSDLRenderer(window, renderer);
     ImGui_ImplSDLRenderer3_Init(renderer);
 
-    // ── App state ─────────────────────────────────────────────────────────────
+    // â”€â”€ App state â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     Framenote::ToolManager toolManager;
     Framenote::TabManager  tabManager(renderer);
     Framenote::MainWindow  mainWindow(&tabManager, &toolManager);
 
-    // ── Main loop ─────────────────────────────────────────────────────────────
+    // â”€â”€ Main loop â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     bool running = true;
+    bool pendingQuit = false;
+    bool showQuitDialog = false;
     while (running) {
         SDL_Event event;
         while (SDL_PollEvent(&event)) {
             ImGui_ImplSDL3_ProcessEvent(&event);
-            if (event.type == SDL_EVENT_QUIT) running = false;
+            if (event.type == SDL_EVENT_QUIT)
+                pendingQuit = true;
             if (event.type == SDL_EVENT_WINDOW_CLOSE_REQUESTED &&
                 event.window.windowID == SDL_GetWindowID(window))
+                pendingQuit = true;
+        }
+
+        // Quit confirmation if any unsaved tabs
+        if (pendingQuit) {
+            pendingQuit = false;
+            if (tabManager.hasUnsavedTabs())
+                showQuitDialog = true;
+            else
                 running = false;
         }
 
@@ -83,6 +95,24 @@ int main(int argc, char* argv[]) {
         ImGui::NewFrame();
 
         mainWindow.render();
+
+        // Quit confirmation dialog
+        if (showQuitDialog) ImGui::OpenPopup("Quit##confirm");
+        if (ImGui::BeginPopupModal("Quit##confirm", nullptr,
+                ImGuiWindowFlags_AlwaysAutoResize)) {
+            ImGui::Text("You have unsaved changes. Quit anyway?");
+            ImGui::Separator();
+            if (ImGui::Button("Quit without saving", {180, 0})) {
+                running = false;
+                ImGui::CloseCurrentPopup();
+            }
+            ImGui::SameLine();
+            if (ImGui::Button("Cancel", {80, 0})) {
+                showQuitDialog = false;
+                ImGui::CloseCurrentPopup();
+            }
+            ImGui::EndPopup();
+        }
 
         ImGui::Render();
 

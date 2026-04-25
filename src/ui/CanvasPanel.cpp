@@ -11,9 +11,11 @@ static float fnClamp(float val, float lo, float hi) {
 }
 
 CanvasPanel::CanvasPanel(Document* document, Timeline* timeline,
-                         ToolManager* toolManager, CanvasRenderer* renderer)
+                         ToolManager* toolManager, CanvasRenderer* renderer,
+                         float& zoom, float& panX, float& panY)
     : m_document(document), m_timeline(timeline)
     , m_toolManager(toolManager), m_renderer(renderer)
+    , m_zoom(zoom), m_panX(panX), m_panY(panY)
 {}
 
 static Snapshot currentSnapshot(Document& doc, int frameIndex) {
@@ -65,11 +67,17 @@ void CanvasPanel::render() {
 
     // Draw checkerboard
     ImDrawList* dl = ImGui::GetWindowDrawList();
-    float cs = fnClamp(m_zoom, 4.f, 16.f);
+    float cs = m_zoom;
+    // This is for the checkerboard pattern, not the actual canvas grid. 
+    // The pattern is drawn in a way that it aligns with the canvas regardless of zoom and pan, so we use the canvas cell
     for (float y = originY; y < originY + canvasH; y += cs * 2)
         for (float x = originX; x < originX + canvasW; x += cs * 2) {
-            dl->AddRectFilled({x,y},{x+cs,y+cs},IM_COL32(160,160,160,255));
-            dl->AddRectFilled({x+cs,y+cs},{x+cs*2,y+cs*2},IM_COL32(160,160,160,255));
+            // Top-left and bottom-right = light
+            dl->AddRectFilled({x,    y   }, {x+cs,    y+cs   }, IM_COL32(204,204,204,255));
+            dl->AddRectFilled({x+cs, y+cs}, {x+cs*2,  y+cs*2 }, IM_COL32(204,204,204,255));
+            // Top-right and bottom-left = dark
+            dl->AddRectFilled({x+cs, y   }, {x+cs*2,  y+cs   }, IM_COL32(153,153,153,255));
+            dl->AddRectFilled({x,    y+cs}, {x+cs,    y+cs*2 }, IM_COL32(153,153,153,255));
         }
 
     // Canvas texture + border
