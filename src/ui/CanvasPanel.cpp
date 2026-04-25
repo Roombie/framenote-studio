@@ -40,10 +40,10 @@ void CanvasPanel::render() {
     ImGuiWindowFlags flags = ImGuiWindowFlags_NoScrollbar |
                              ImGuiWindowFlags_NoScrollWithMouse |
                              ImGuiWindowFlags_NoMove;
-    ImGui::SetNextWindowPos({180, 30 + 32}, ImGuiCond_FirstUseEver);
+    ImGui::SetNextWindowPos({180, 62}, ImGuiCond_FirstUseEver);
     ImGui::SetNextWindowSize({
         io.DisplaySize.x - 240,
-        io.DisplaySize.y - 232
+        io.DisplaySize.y - 200
     }, ImGuiCond_FirstUseEver);
     ImGui::Begin("Canvas", nullptr, flags);
 
@@ -68,8 +68,6 @@ void CanvasPanel::render() {
     // Draw checkerboard
     ImDrawList* dl = ImGui::GetWindowDrawList();
     float cs = m_zoom;
-    // This is for the checkerboard pattern, not the actual canvas grid. 
-    // The pattern is drawn in a way that it aligns with the canvas regardless of zoom and pan, so we use the canvas cell
     for (float y = originY; y < originY + canvasH; y += cs * 2)
         for (float x = originX; x < originX + canvasW; x += cs * 2) {
             // Top-left and bottom-right = light

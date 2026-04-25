@@ -1,4 +1,5 @@
 ﻿#include "renderer/CanvasRenderer.h"
+#include <vector>
 
 namespace Framenote {
 
@@ -41,14 +42,49 @@ void CanvasRenderer::resize(int newW, int newH) {
 }
 
 void CanvasRenderer::uploadFrame(const Frame& frame) {
+    // If buffer matches canvas size, upload directly
+    if (frame.bufferWidth() == m_canvasW && frame.bufferHeight() == m_canvasH) {
+        SDL_UpdateTexture(m_canvasTex, nullptr,
+                          frame.pixels().data(), m_canvasW * 4);
+        return;
+    }
+
+    // Buffer is larger than canvas — copy only the visible region row by row
+    std::vector<uint8_t> visible(static_cast<size_t>(m_canvasW * m_canvasH * 4));
     const auto& src = frame.pixels();
-    // Use buffer width as pitch — buffer may be larger than visible canvas
-    SDL_UpdateTexture(m_canvasTex, nullptr, src.data(), frame.bufferWidth() * 4);
+    int bufW = frame.bufferWidth();
+    int copyW = m_canvasW < bufW ? m_canvasW : bufW;
+    int copyH = m_canvasH < frame.bufferHeight() ? m_canvasH : frame.bufferHeight();
+
+    for (int y = 0; y < copyH; ++y) {
+        const uint8_t* srcRow  = src.data()     + y * bufW    * 4;
+        uint8_t*       dstRow  = visible.data() + y * m_canvasW * 4;
+        for (int x = 0; x < copyW * 4; ++x)
+            dstRow[x] = srcRow[x];
+    }
+
+    SDL_UpdateTexture(m_canvasTex, nullptr, visible.data(), m_canvasW * 4);
 }
 
 void CanvasRenderer::uploadOnionFrame(const Frame& frame, float opacity) {
-    const auto& src = frame.pixels();
-    SDL_UpdateTexture(m_onionTex, nullptr, src.data(), frame.bufferWidth() * 4);
+    // Same crop logic for onion skin
+    if (frame.bufferWidth() == m_canvasW && frame.bufferHeight() == m_canvasH) {
+        SDL_UpdateTexture(m_onionTex, nullptr,
+                          frame.pixels().data(), m_canvasW * 4);
+    } else {
+        std::vector<uint8_t> visible(static_cast<size_t>(m_canvasW * m_canvasH * 4));
+        const auto& src = frame.pixels();
+        int bufW  = frame.bufferWidth();
+        int copyW = m_canvasW < bufW ? m_canvasW : bufW;
+        int copyH = m_canvasH < frame.bufferHeight() ? m_canvasH : frame.bufferHeight();
+        for (int y = 0; y < copyH; ++y) {
+            const uint8_t* srcRow = src.data()     + y * bufW     * 4;
+            uint8_t*       dstRow = visible.data() + y * m_canvasW * 4;
+            for (int x = 0; x < copyW * 4; ++x)
+                dstRow[x] = srcRow[x];
+        }
+        SDL_UpdateTexture(m_onionTex, nullptr, visible.data(), m_canvasW * 4);
+    }
     SDL_SetTextureAlphaMod(m_onionTex, static_cast<uint8_t>(opacity * 255.0f));
     SDL_SetTextureColorMod(m_onionTex, 100, 180, 255);
 }

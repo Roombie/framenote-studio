@@ -142,14 +142,35 @@ void MainWindow::renderMenuBar() {
 
             ImGui::BeginDisabled(!canUndo);
             if (ImGui::MenuItem("Undo", "Ctrl+Z")) {
-                // Undo is handled in CanvasPanel via keyboard,
-                // but also expose here for menu access
+                if (tab) {
+                    int fi = tab->timeline->currentFrame();
+                    auto& frame = tab->document->frame(fi);
+                    Snapshot current;
+                    current.frameIndex   = fi;
+                    current.bufferWidth  = frame.bufferWidth();
+                    current.bufferHeight = frame.bufferHeight();
+                    current.pixels       = frame.pixels();
+                    Snapshot restored = tab->history->undo(std::move(current));
+                    tab->document->frame(restored.frameIndex).pixels() = restored.pixels;
+                    tab->document->markDirty();
+                }
             }
             ImGui::EndDisabled();
 
             ImGui::BeginDisabled(!canRedo);
             if (ImGui::MenuItem("Redo", "Ctrl+Y")) {
-                // Same — handled in CanvasPanel
+                if (tab) {
+                    int fi = tab->timeline->currentFrame();
+                    auto& frame = tab->document->frame(fi);
+                    Snapshot current;
+                    current.frameIndex   = fi;
+                    current.bufferWidth  = frame.bufferWidth();
+                    current.bufferHeight = frame.bufferHeight();
+                    current.pixels       = frame.pixels();
+                    Snapshot restored = tab->history->redo(std::move(current));
+                    tab->document->frame(restored.frameIndex).pixels() = restored.pixels;
+                    tab->document->markDirty();
+                }
             }
             ImGui::EndDisabled();
 

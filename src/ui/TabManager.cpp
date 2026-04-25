@@ -35,11 +35,11 @@ void TabManager::render(ToolManager& toolManager) {
         ImGui::InputText("Name##new", m_newDocName, sizeof(m_newDocName));
         ImGui::Separator();
         ImGui::Text("Canvas size:");
-        ImGui::SetNextItemWidth(80);
+        ImGui::SetNextItemWidth(120);
         ImGui::InputInt("W##new", &m_newDocW);
         ImGui::SameLine(); ImGui::Text("x");
         ImGui::SameLine();
-        ImGui::SetNextItemWidth(80);
+        ImGui::SetNextItemWidth(120);
         ImGui::InputInt("H##new", &m_newDocH);
 
         if (m_newDocW <    1) m_newDocW =    1;
@@ -162,12 +162,13 @@ void TabManager::renderHomeTab(ToolManager& toolManager) {
     float tabBarH = ImGui::GetFrameHeight() + 32;
 
     ImGui::SetNextWindowPos({0, tabBarH}, ImGuiCond_Always);
-    ImGui::SetNextWindowSize({io.DisplaySize.x, io.DisplaySize.y - tabBarH},
-                              ImGuiCond_Always);
+    ImGui::SetNextWindowSize({io.DisplaySize.x, io.DisplaySize.y - tabBarH}, ImGuiCond_Always);
+    ImGui::SetNextWindowBgAlpha(1.0f);
     ImGui::Begin("##Home", nullptr,
         ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoResize |
         ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoSavedSettings |
-        ImGuiWindowFlags_NoBringToFrontOnFocus);
+        ImGuiWindowFlags_NoBringToFrontOnFocus |
+        ImGuiWindowFlags_NoScrollbar);
 
     // Center content
     float centerX = io.DisplaySize.x * 0.5f;
@@ -182,6 +183,9 @@ void TabManager::renderHomeTab(ToolManager& toolManager) {
     ImGui::SetCursorPos({centerX - 120, startY + 90});
     if (ImGui::Button("  New Document  ", {240, 40})) {
         m_showNewDialog = true;
+        m_newDocW = 128;
+        m_newDocH = 128;
+        m_newDocFps = 8;
         strncpy(m_newDocName, "untitled", sizeof(m_newDocName));
     }
 
@@ -204,6 +208,20 @@ void TabManager::renderHomeTab(ToolManager& toolManager) {
     ImGui::TextDisabled("Recent files");
     ImGui::SetCursorPos({centerX - 120, startY + 230});
     ImGui::TextDisabled("(No recent files)");
+
+    // Made by + socials at the bottom
+    float socialY = io.DisplaySize.y - tabBarH - 60;
+    ImGui::SetCursorPos({centerX - 120, socialY});
+    ImGui::TextDisabled("Made by Roombie");
+    ImGui::SetCursorPos({centerX - 120, socialY + 24});
+    if (ImGui::SmallButton("YouTube")) SDL_OpenURL("https://www.youtube.com/@Roombie");
+    if (ImGui::IsItemHovered()) ImGui::SetTooltip("youtube.com/@Roombie");
+    ImGui::SameLine();
+    if (ImGui::SmallButton("Twitter / X")) SDL_OpenURL("https://x.com/Roombie_");
+    if (ImGui::IsItemHovered()) ImGui::SetTooltip("x.com/Roombie_");
+    ImGui::SameLine();
+    if (ImGui::SmallButton("Itch.io")) SDL_OpenURL("https://roombiedev.itch.io/");
+    if (ImGui::IsItemHovered()) ImGui::SetTooltip("roombiedev.itch.io");
 
     ImGui::End();
 }
