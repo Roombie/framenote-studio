@@ -36,6 +36,7 @@ public:
     bool onionSkinEnabled()    const { return m_onionSkin; }
     void setOnionSkin(bool on)       { m_onionSkin = on; }
     float onionSkinOpacity()   const { return m_onionOpacity; }
+    void  setOnionSkinOpacity(float v) { m_onionOpacity = v < 0.05f ? 0.05f : (v > 1.f ? 1.f : v); }
 
     // ── Tick: call every render loop with deltaTime in seconds ────────────────
     // Returns true if the current frame changed (so renderer knows to redraw)

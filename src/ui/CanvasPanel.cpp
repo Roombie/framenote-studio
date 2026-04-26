@@ -1,5 +1,6 @@
 #include "ui/CanvasPanel.h"
 #include <imgui.h>
+#include <string>
 #include <SDL3/SDL.h>
 
 namespace Framenote {
@@ -74,7 +75,18 @@ void CanvasPanel::render() {
     ImTextureID checker = (ImTextureID)(intptr_t)m_renderer->checkerboardTexture();
     dl->AddImage(checker, {originX,originY}, {originX+canvasW,originY+canvasH});
 
-    // Draw canvas texture on top
+    // Draw onion skin (previous frame ghost) under the current frame.
+    // ImGui's AddImage ignores SDL texture alpha/color mods, so we pass
+    // the opacity and blue tint directly as the tint color parameter.
+    if (m_timeline->onionSkinEnabled() && m_timeline->currentFrame() > 0) {
+        ImTextureID onion = (ImTextureID)(intptr_t)m_renderer->onionTexture();
+        uint8_t alpha = static_cast<uint8_t>(m_timeline->onionSkinOpacity() * 255.0f);
+        ImU32 tint = IM_COL32(100, 180, 255, alpha); // blue-ish ghost
+        dl->AddImage(onion, {originX,originY}, {originX+canvasW,originY+canvasH},
+                     {0,0}, {1,1}, tint);
+    }
+
+    // Draw current frame canvas texture on top
     ImTextureID tid = (ImTextureID)(intptr_t)m_renderer->canvasTexture();
     dl->AddImage(tid, {originX,originY}, {originX+canvasW,originY+canvasH});
 
@@ -94,6 +106,8 @@ void CanvasPanel::render() {
     bool spaceHeld = ImGui::IsKeyDown(ImGuiKey_Space);
     bool ctrlHeld  = io.KeyCtrl;
     bool popupOpen = ImGui::IsPopupOpen("", ImGuiPopupFlags_AnyPopupId);
+
+    bool imguiCapturing = false;
 
     // ── Keyboard shortcuts ────────────────────────────────────────────────────
     if (!ctrlHeld && !io.WantTextInput && !popupOpen) {
@@ -175,13 +189,13 @@ void CanvasPanel::render() {
     // ── Pan ───────────────────────────────────────────────────────────────────
     bool isPanning = io.MouseDown[2] || (spaceHeld && io.MouseDown[0]);
     bool isDrawing = inCanvas && !spaceHeld && !io.MouseDown[2] && io.MouseDown[0];
-    if (inWindow && isPanning && !isDrawing && !popupOpen) {
+    if (inWindow && isPanning && !isDrawing && !popupOpen && !imguiCapturing) {
         m_panX += io.MouseDelta.x;
         m_panY += io.MouseDelta.y;
     }
 
     // ── Drawing ───────────────────────────────────────────────────────────────
-    if (inCanvas && !spaceHeld && !io.MouseDown[2] && !popupOpen) {
+    if (inCanvas && !spaceHeld && !io.MouseDown[2] && !popupOpen && !imguiCapturing) {
         float relX = (mp.x - originX) / canvasW;
         float relY = (mp.y - originY) / canvasH;
         int px = (int)(relX * cw);

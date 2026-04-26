@@ -15,6 +15,7 @@ private:
     void renderMenuBar();
     void renderCanvasSizeDialog();
     void renderExportDialog();
+    void renderOnionOpacityDialog();
 
     enum class ExportType { GIF, PNG, PNGSequence };
 
@@ -22,6 +23,7 @@ private:
     ToolManager* m_toolManager;
 
     bool        m_showAbout            = false;
+    bool        m_showOnionDialog        = false;
     bool        m_showCanvasSizeDialog = false;
     bool        m_showExportDialog     = false;
     ExportType  m_exportType           = ExportType::GIF;

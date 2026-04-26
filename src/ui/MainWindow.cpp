@@ -26,6 +26,18 @@ void MainWindow::render() {
     m_tabManager->render(*m_toolManager);
     renderCanvasSizeDialog();
     renderExportDialog();
+    renderOnionOpacityDialog();
+
+    // Canvas Size shortcut — C key (only when no text input active and tab open)
+    ImGuiIO& io = ImGui::GetIO();
+    if (!io.WantTextInput && ImGui::IsKeyPressed(ImGuiKey_C, false)) {
+        auto* tab = m_tabManager->activeTab();
+        if (tab) {
+            m_showCanvasSizeDialog = true;
+            m_newCanvasW = tab->document->canvasSize().width;
+            m_newCanvasH = tab->document->canvasSize().height;
+        }
+    }
 }
 
 void MainWindow::renderMenuBar() {
@@ -208,8 +220,11 @@ void MainWindow::renderMenuBar() {
                 bool onion = tab->timeline->onionSkinEnabled();
                 if (ImGui::MenuItem("Onion Skin", "O", &onion))
                     tab->timeline->setOnionSkin(onion);
+                if (ImGui::MenuItem("Onion Skin Opacity..."))
+                    m_showOnionDialog = true;
             } else {
                 ImGui::MenuItem("Onion Skin", "O");
+                ImGui::MenuItem("Onion Skin Opacity...");
             }
             ImGui::EndDisabled();
 
@@ -356,6 +371,38 @@ void MainWindow::renderCanvasSizeDialog() {
         }
         ImGui::EndPopup();
     }
+}
+
+void MainWindow::renderOnionOpacityDialog() {
+    if (m_showOnionDialog) ImGui::OpenPopup("Onion Skin Opacity##dlg");
+
+    if (ImGui::BeginPopupModal("Onion Skin Opacity##dlg", nullptr,
+            ImGuiWindowFlags_AlwaysAutoResize)) {
+
+        auto* tab = m_tabManager->activeTab();
+        if (!tab) { ImGui::CloseCurrentPopup(); ImGui::EndPopup(); return; }
+
+        bool onion = tab->timeline->onionSkinEnabled();
+        if (ImGui::Checkbox("Enabled", &onion))
+            tab->timeline->setOnionSkin(onion);
+
+        ImGui::Spacing();
+        ImGui::Text("Opacity:");
+        float opacityPct = tab->timeline->onionSkinOpacity() * 100.0f;
+        ImGui::SetNextItemWidth(220);
+        if (ImGui::SliderFloat("##onionpct", &opacityPct, 5.0f, 100.0f, "%.0f%%",
+                ImGuiSliderFlags_AlwaysClamp))
+            tab->timeline->setOnionSkinOpacity(opacityPct / 100.0f);
+
+        ImGui::Spacing();
+        ImGui::Separator();
+        if (ImGui::Button("Close", {80, 0})) {
+            m_showOnionDialog = false;
+            ImGui::CloseCurrentPopup();
+        }
+        ImGui::EndPopup();
+    }
+    m_showOnionDialog = false;
 }
 
 } // namespace Framenote
