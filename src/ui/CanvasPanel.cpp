@@ -12,10 +12,12 @@ static float fnClamp(float val, float lo, float hi) {
 
 CanvasPanel::CanvasPanel(Document* document, Timeline* timeline,
                          ToolManager* toolManager, CanvasRenderer* renderer,
-                         float& zoom, float& panX, float& panY)
+                         float& zoom, float& panX, float& panY,
+                         History& history)
     : m_document(document), m_timeline(timeline)
     , m_toolManager(toolManager), m_renderer(renderer)
     , m_zoom(zoom), m_panX(panX), m_panY(panY)
+    , m_history(history)
 {}
 
 static Snapshot currentSnapshot(Document& doc, int frameIndex) {
@@ -156,7 +158,7 @@ void CanvasPanel::render() {
     // ── Undo / Redo ───────────────────────────────────────────────────────────
     if (ctrlHeld && !popupOpen) {
         if (ImGui::IsKeyPressed(ImGuiKey_Z, false)) {
-            History& hist = m_toolManager->history();
+            History& hist = m_history;
             if (hist.canUndo()) {
                 int fi = m_timeline->currentFrame();
                 Snapshot restored = hist.undo(currentSnapshot(*m_document, fi));
@@ -165,7 +167,7 @@ void CanvasPanel::render() {
         }
         if (ImGui::IsKeyPressed(ImGuiKey_Y, false) ||
             (io.KeyShift && ImGui::IsKeyPressed(ImGuiKey_Z, false))) {
-            History& hist = m_toolManager->history();
+            History& hist = m_history;
             if (hist.canRedo()) {
                 int fi = m_timeline->currentFrame();
                 Snapshot restored = hist.redo(currentSnapshot(*m_document, fi));
@@ -199,7 +201,16 @@ void CanvasPanel::render() {
         if (tool) {
             int fi = m_timeline->currentFrame();
             if (io.MouseClicked[0]) {
-                m_toolManager->snapshotBefore(*m_document, fi);
+                // Snapshot current frame state before drawing for undo
+                {
+                    auto& f = m_document->frame(fi);
+                    Snapshot snap;
+                    snap.frameIndex   = fi;
+                    snap.bufferWidth  = f.bufferWidth();
+                    snap.bufferHeight = f.bufferHeight();
+                    snap.pixels       = f.pixels();
+                    m_history.push(std::move(snap));
+                }
                 tool->onPress(*m_document, fi, e);
             } else if (io.MouseDown[0]) {
                 tool->onDrag(*m_document, fi, e);

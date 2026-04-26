@@ -3,6 +3,7 @@
 #include <imgui.h>
 #include "core/Document.h"
 #include "core/Timeline.h"
+#include "core/History.h"
 #include "tools/ToolManager.h"
 #include "renderer/CanvasRenderer.h"
 
@@ -16,7 +17,8 @@ public:
                 CanvasRenderer* renderer,
                 float&          zoom,
                 float&          panX,
-                float&          panY);
+                float&          panY,
+                History&        history);
 
     void render();
 
@@ -28,9 +30,10 @@ private:
     ToolManager*    m_toolManager;
     CanvasRenderer* m_renderer;
 
-    float& m_zoom;
-    float& m_panX;
-    float& m_panY;
+    float&   m_zoom;
+    float&   m_panX;
+    float&   m_panY;
+    History& m_history;
 };
 
 } // namespace Framenote

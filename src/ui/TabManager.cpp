@@ -346,7 +346,8 @@ void TabManager::renderDocumentTab(DocumentTab& tab, ToolManager& toolManager) {
     TimelinePanel(tab.document.get(), tab.timeline.get()).render();
     CanvasPanel(tab.document.get(), tab.timeline.get(),
                 &toolManager, tab.renderer.get(),
-                tab.canvasZoom, tab.canvasPanX, tab.canvasPanY).render();
+                tab.canvasZoom, tab.canvasPanX, tab.canvasPanY,
+                *tab.history).render();
 }
 
 void TabManager::newDocument(const std::string& name, int w, int h, int fps) {
