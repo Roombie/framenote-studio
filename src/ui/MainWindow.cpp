@@ -28,14 +28,91 @@ void MainWindow::render() {
     renderExportDialog();
     renderOnionOpacityDialog();
 
-    // Canvas Size shortcut — C key (only when no text input active and tab open)
+    // -- Global keyboard shortcuts ---------------------------------------------
     ImGuiIO& io = ImGui::GetIO();
-    if (!io.WantTextInput && ImGui::IsKeyPressed(ImGuiKey_C, false)) {
-        auto* tab = m_tabManager->activeTab();
-        if (tab) {
-            m_showCanvasSizeDialog = true;
-            m_newCanvasW = tab->document->canvasSize().width;
-            m_newCanvasH = tab->document->canvasSize().height;
+    if (!io.WantTextInput) {
+        bool ctrl  = io.KeyCtrl;
+        bool shift = io.KeyShift;
+
+        // Ctrl+N -- New document
+        if (ctrl && ImGui::IsKeyPressed(ImGuiKey_N, false))
+            m_tabManager->showNewDialog();
+
+        // Ctrl+O -- Open file
+        if (ctrl && ImGui::IsKeyPressed(ImGuiKey_O, false)) {
+            std::string path = FileDialog::openFile(
+                FILTER_FRAMENOTE, "Open Framenote File");
+            if (!path.empty()) {
+                std::string err;
+                auto doc = FileManager::load(path, err);
+                if (doc) {
+                    std::string name = path.substr(path.find_last_of("/\\") + 1);
+                    m_tabManager->openDocument(std::move(doc), name, path);
+                } else {
+                    m_statusMsg = "Open failed: " + err;
+                }
+            }
+        }
+
+        // Ctrl+S -- Save
+        if (ctrl && !shift && ImGui::IsKeyPressed(ImGuiKey_S, false)) {
+            auto* tab = m_tabManager->activeTab();
+            if (tab && tab->document->isDirty()) {
+                if (tab->document->filePath().empty()) {
+                    std::string path = FileDialog::saveFile(
+                        FILTER_FRAMENOTE, "framenote", "Save Framenote File");
+                    if (!path.empty()) {
+                        std::string err;
+                        if (FileManager::save(*tab->document, path, err)) {
+                            tab->document->setFilePath(path);
+                            tab->document->clearDirty();
+                            tab->name = path.substr(path.find_last_of("/\\") + 1);
+                            m_statusMsg = "Saved!";
+                        }
+                    }
+                } else {
+                    std::string err;
+                    if (FileManager::save(*tab->document, tab->document->filePath(), err)) {
+                        tab->document->clearDirty();
+                        m_statusMsg = "Saved!";
+                    }
+                }
+            }
+        }
+
+        // Ctrl+Shift+S -- Save As
+        if (ctrl && shift && ImGui::IsKeyPressed(ImGuiKey_S, false)) {
+            auto* tab = m_tabManager->activeTab();
+            if (tab) {
+                std::string path = FileDialog::saveFile(
+                    FILTER_FRAMENOTE, "framenote", "Save As");
+                if (!path.empty()) {
+                    std::string err;
+                    if (FileManager::save(*tab->document, path, err)) {
+                        tab->document->setFilePath(path);
+                        tab->document->clearDirty();
+                        tab->name = path.substr(path.find_last_of("/\\") + 1);
+                        m_statusMsg = "Saved!";
+                    }
+                }
+            }
+        }
+
+        // C -- Canvas Size
+        if (!ctrl && ImGui::IsKeyPressed(ImGuiKey_C, false)) {
+            auto* tab = m_tabManager->activeTab();
+            if (tab) {
+                m_showCanvasSizeDialog = true;
+                m_newCanvasW = tab->document->canvasSize().width;
+                m_newCanvasH = tab->document->canvasSize().height;
+            }
+        }
+
+        // O -- Toggle onion skin
+        if (!ctrl && ImGui::IsKeyPressed(ImGuiKey_O, false)) {
+            auto* tab = m_tabManager->activeTab();
+            if (tab)
+                tab->timeline->setOnionSkin(!tab->timeline->onionSkinEnabled());
         }
     }
 }
@@ -43,7 +120,7 @@ void MainWindow::render() {
 void MainWindow::renderMenuBar() {
     if (ImGui::BeginMainMenuBar()) {
 
-        // ── File ──────────────────────────────────────────────────────────────
+        // -- File --------------------------------------------------------------
         if (ImGui::BeginMenu("File")) {
             auto* tab    = m_tabManager->activeTab();
             bool hasTab  = tab != nullptr;
@@ -69,7 +146,7 @@ void MainWindow::renderMenuBar() {
 
             ImGui::Separator();
 
-            // Save — only enabled when there are unsaved changes
+            // Save -- only enabled when there are unsaved changes
             ImGui::BeginDisabled(!isDirty);
             if (ImGui::MenuItem("Save", "Ctrl+S")) {
                 if (tab->document->filePath().empty()) {
@@ -98,7 +175,7 @@ void MainWindow::renderMenuBar() {
             }
             ImGui::EndDisabled();
 
-            // Save As — enabled whenever a tab is open
+            // Save As -- enabled whenever a tab is open
             ImGui::BeginDisabled(!hasTab);
             if (ImGui::MenuItem("Save As...", "Ctrl+Shift+S")) {
                 std::string path = FileDialog::saveFile(
@@ -119,7 +196,7 @@ void MainWindow::renderMenuBar() {
 
             ImGui::Separator();
 
-            // Export — only when tab open
+            // Export -- only when tab open
             ImGui::BeginDisabled(!hasTab);
             if (ImGui::BeginMenu("Export")) {
                 if (ImGui::MenuItem("Export as GIF...")) {
@@ -146,7 +223,7 @@ void MainWindow::renderMenuBar() {
             ImGui::EndMenu();
         }
 
-        // ── Edit ──────────────────────────────────────────────────────────────
+        // -- Edit --------------------------------------------------------------
         if (ImGui::BeginMenu("Edit")) {
             auto* tab    = m_tabManager->activeTab();
             bool canUndo = tab && tab->history->canUndo();
@@ -189,7 +266,7 @@ void MainWindow::renderMenuBar() {
             ImGui::EndMenu();
         }
 
-        // ── Sprite ────────────────────────────────────────────────────────────
+        // -- Sprite ------------------------------------------------------------
         if (ImGui::BeginMenu("Sprite")) {
             auto* tab   = m_tabManager->activeTab();
             bool hasTab = tab != nullptr;
@@ -204,7 +281,7 @@ void MainWindow::renderMenuBar() {
             ImGui::EndMenu();
         }
 
-        // ── View ──────────────────────────────────────────────────────────────
+        // -- View --------------------------------------------------------------
         if (ImGui::BeginMenu("View")) {
             const char* themeLabel = Theme::current() == ThemeMode::Dark
                 ? "Switch to Light Mode" : "Switch to Dark Mode";
@@ -231,7 +308,7 @@ void MainWindow::renderMenuBar() {
             ImGui::EndMenu();
         }
 
-        // ── Help ──────────────────────────────────────────────────────────────
+        // -- Help --------------------------------------------------------------
         if (ImGui::BeginMenu("Help")) {
             if (ImGui::MenuItem("About")) m_showAbout = true;
             ImGui::EndMenu();
@@ -257,7 +334,7 @@ void MainWindow::renderMenuBar() {
         ImGui::EndMainMenuBar();
     }
 
-    // ── About modal ───────────────────────────────────────────────────────────
+    // -- About modal -----------------------------------------------------------
     if (m_showAbout) ImGui::OpenPopup("About##modal");
     if (ImGui::BeginPopupModal("About##modal", nullptr,
             ImGuiWindowFlags_AlwaysAutoResize)) {
