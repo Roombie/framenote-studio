@@ -94,6 +94,18 @@ int main(int argc, char* argv[]) {
         ImGui_ImplSDL3_NewFrame();
         ImGui::NewFrame();
 
+        // Tick the active tab's timeline for animation playback
+        {
+            static Uint64 lastTime = SDL_GetPerformanceCounter();
+            Uint64 now = SDL_GetPerformanceCounter();
+            float deltaTime = (float)(now - lastTime) / (float)SDL_GetPerformanceFrequency();
+            lastTime = now;
+            // Clamp delta to avoid huge jumps after alt-tab or breakpoints
+            if (deltaTime > 0.1f) deltaTime = 0.1f;
+            auto* tab = tabManager.activeTab();
+            if (tab) tab->timeline->tick(deltaTime);
+        }
+
         mainWindow.render();
 
         // Quit confirmation dialog
