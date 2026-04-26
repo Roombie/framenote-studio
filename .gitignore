@@ -1,32 +1,24 @@
-# Prerequisites
-*.d
+﻿# Build output
+build/
 
-# Compiled Object files
-*.slo
-*.lo
-*.o
+# VS generated files
+.vs/
+*.vcxproj.user
+
+# Third-party vendored dependencies (too large for git)
+third_party/imgui/
+third_party/stb/
+third_party/nlohmann/
+third_party/gif-h/
+
+# Compiled outputs
+*.exe
 *.obj
-
-# Precompiled Headers
-*.gch
-*.pch
-
-# Compiled Dynamic libraries
-*.so
-*.dylib
-*.dll
-
-# Fortran module files
-*.mod
-*.smod
-
-# Compiled Static libraries
-*.lai
-*.la
-*.a
+*.pdb
+*.ilk
+*.exp
 *.lib
 
-# Executables
-*.exe
-*.out
-*.app
+# Runtime outputs
+output.gif
+imgui.ini
