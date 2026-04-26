@@ -1,5 +1,6 @@
-﻿#include "renderer/CanvasRenderer.h"
+#include "renderer/CanvasRenderer.h"
 #include <vector>
+#include <cstring>
 
 namespace Framenote {
 
@@ -7,6 +8,7 @@ CanvasRenderer::CanvasRenderer(SDL_Renderer* renderer, int canvasW, int canvasH)
     : m_renderer(renderer), m_canvasW(canvasW), m_canvasH(canvasH)
 {
     createTextures();
+    buildCheckerboard(2.0f); // 2 canvas pixels per checker square
 }
 
 CanvasRenderer::~CanvasRenderer() {
@@ -30,8 +32,9 @@ void CanvasRenderer::createTextures() {
 }
 
 void CanvasRenderer::destroyTextures() {
-    if (m_canvasTex) { SDL_DestroyTexture(m_canvasTex); m_canvasTex = nullptr; }
-    if (m_onionTex)  { SDL_DestroyTexture(m_onionTex);  m_onionTex  = nullptr; }
+    if (m_canvasTex)  { SDL_DestroyTexture(m_canvasTex);  m_canvasTex  = nullptr; }
+    if (m_onionTex)   { SDL_DestroyTexture(m_onionTex);   m_onionTex   = nullptr; }
+    if (m_checkerTex) { SDL_DestroyTexture(m_checkerTex); m_checkerTex = nullptr; }
 }
 
 void CanvasRenderer::resize(int newW, int newH) {
@@ -39,49 +42,80 @@ void CanvasRenderer::resize(int newW, int newH) {
     m_canvasH = newH;
     destroyTextures();
     createTextures();
+    buildCheckerboard(2.0f);
+}
+
+void CanvasRenderer::buildCheckerboard(float squareSizeCanvasPx) {
+    // Pre-render the transparency grid into a static texture.
+    // squareSizeCanvasPx = checker square size in canvas pixels.
+    // We build it at canvas resolution and let zoom handle scaling.
+    int sq = (int)squareSizeCanvasPx;
+    if (sq < 1) sq = 1;
+
+    // ARGB8888 pixel buffer for the checkerboard
+    std::vector<uint32_t> pixels(
+        static_cast<size_t>(m_canvasW * m_canvasH));
+
+    const uint32_t light = 0xFFCCCCCC; // light grey
+    const uint32_t dark  = 0xFF999999; // dark grey
+
+    for (int y = 0; y < m_canvasH; ++y) {
+        for (int x = 0; x < m_canvasW; ++x) {
+            bool even = ((x / sq) + (y / sq)) % 2 == 0;
+            pixels[y * m_canvasW + x] = even ? light : dark;
+        }
+    }
+
+    if (m_checkerTex) SDL_DestroyTexture(m_checkerTex);
+    m_checkerTex = SDL_CreateTexture(m_renderer,
+        SDL_PIXELFORMAT_ARGB8888,
+        SDL_TEXTUREACCESS_STATIC,
+        m_canvasW, m_canvasH);
+    SDL_SetTextureScaleMode(m_checkerTex, SDL_SCALEMODE_NEAREST);
+    SDL_UpdateTexture(m_checkerTex, nullptr,
+                      pixels.data(), m_canvasW * sizeof(uint32_t));
 }
 
 void CanvasRenderer::uploadFrame(const Frame& frame) {
-    // If buffer matches canvas size, upload directly
     if (frame.bufferWidth() == m_canvasW && frame.bufferHeight() == m_canvasH) {
+        // Fast path: buffer matches canvas exactly
         SDL_UpdateTexture(m_canvasTex, nullptr,
                           frame.pixels().data(), m_canvasW * 4);
         return;
     }
 
-    // Buffer is larger than canvas — copy only the visible region row by row
-    std::vector<uint8_t> visible(static_cast<size_t>(m_canvasW * m_canvasH * 4));
+    // Crop path: buffer is larger than canvas — copy only visible rows
+    std::vector<uint8_t> visible(
+        static_cast<size_t>(m_canvasW * m_canvasH * 4), 0);
     const auto& src = frame.pixels();
-    int bufW = frame.bufferWidth();
-    int copyW = m_canvasW < bufW ? m_canvasW : bufW;
+    int bufW  = frame.bufferWidth();
+    int copyW = m_canvasW < bufW                ? m_canvasW                : bufW;
     int copyH = m_canvasH < frame.bufferHeight() ? m_canvasH : frame.bufferHeight();
 
     for (int y = 0; y < copyH; ++y) {
-        const uint8_t* srcRow  = src.data()     + y * bufW    * 4;
-        uint8_t*       dstRow  = visible.data() + y * m_canvasW * 4;
-        for (int x = 0; x < copyW * 4; ++x)
-            dstRow[x] = srcRow[x];
+        std::memcpy(visible.data()   + y * m_canvasW * 4,
+                    src.data()       + y * bufW * 4,
+                    static_cast<size_t>(copyW * 4));
     }
 
     SDL_UpdateTexture(m_canvasTex, nullptr, visible.data(), m_canvasW * 4);
 }
 
 void CanvasRenderer::uploadOnionFrame(const Frame& frame, float opacity) {
-    // Same crop logic for onion skin
     if (frame.bufferWidth() == m_canvasW && frame.bufferHeight() == m_canvasH) {
         SDL_UpdateTexture(m_onionTex, nullptr,
                           frame.pixels().data(), m_canvasW * 4);
     } else {
-        std::vector<uint8_t> visible(static_cast<size_t>(m_canvasW * m_canvasH * 4));
+        std::vector<uint8_t> visible(
+            static_cast<size_t>(m_canvasW * m_canvasH * 4), 0);
         const auto& src = frame.pixels();
         int bufW  = frame.bufferWidth();
-        int copyW = m_canvasW < bufW ? m_canvasW : bufW;
+        int copyW = m_canvasW < bufW                 ? m_canvasW                 : bufW;
         int copyH = m_canvasH < frame.bufferHeight() ? m_canvasH : frame.bufferHeight();
         for (int y = 0; y < copyH; ++y) {
-            const uint8_t* srcRow = src.data()     + y * bufW     * 4;
-            uint8_t*       dstRow = visible.data() + y * m_canvasW * 4;
-            for (int x = 0; x < copyW * 4; ++x)
-                dstRow[x] = srcRow[x];
+            std::memcpy(visible.data() + y * m_canvasW * 4,
+                        src.data()     + y * bufW * 4,
+                        static_cast<size_t>(copyW * 4));
         }
         SDL_UpdateTexture(m_onionTex, nullptr, visible.data(), m_canvasW * 4);
     }

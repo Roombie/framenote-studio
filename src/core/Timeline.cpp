@@ -4,7 +4,8 @@
 namespace Framenote {
 
 void Timeline::play() {
-    if (m_frameCount > 1) m_playing = true;
+    m_playing = true;
+    m_accumulator = 0.0f;
 }
 
 void Timeline::pause() {

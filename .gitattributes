@@ -1,2 +1,12 @@
-# Auto detect text files and perform LF normalization
-* text=auto
+# Enforce LF line endings for all source files
+* text=auto eol=lf
+
+# Binary files — no line ending conversion
+*.ico   binary
+*.png   binary
+*.gif   binary
+*.bmp   binary
+*.exe   binary
+*.dll   binary
+*.lib   binary
+*.pdb   binary

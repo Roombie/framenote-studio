@@ -43,7 +43,7 @@ int main(int argc, char* argv[]) {
 
     SDL_SetRenderVSync(renderer, 1);
 
-    // â”€â”€ Dear ImGui â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+    // Dear ImGui
     IMGUI_CHECKVERSION();
     ImGui::CreateContext();
     ImGuiIO& io = ImGui::GetIO();
@@ -61,12 +61,12 @@ int main(int argc, char* argv[]) {
     ImGui_ImplSDL3_InitForSDLRenderer(window, renderer);
     ImGui_ImplSDLRenderer3_Init(renderer);
 
-    // â”€â”€ App state â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+    // App state
     Framenote::ToolManager toolManager;
     Framenote::TabManager  tabManager(renderer);
     Framenote::MainWindow  mainWindow(&tabManager, &toolManager);
 
-    // â”€â”€ Main loop â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+    // Main loop
     bool running = true;
     bool pendingQuit = false;
     bool showQuitDialog = false;
@@ -100,9 +100,9 @@ int main(int argc, char* argv[]) {
         if (showQuitDialog) ImGui::OpenPopup("Quit##confirm");
         if (ImGui::BeginPopupModal("Quit##confirm", nullptr,
                 ImGuiWindowFlags_AlwaysAutoResize)) {
-            ImGui::Text("You have unsaved changes. Quit anyway?");
+            ImGui::Text("You have unsaved changes.\nDo you want to save before quitting?");
             ImGui::Separator();
-            if (ImGui::Button("Quit without saving", {180, 0})) {
+            if (ImGui::Button("Don't Save", {120, 0})) {
                 running = false;
                 ImGui::CloseCurrentPopup();
             }

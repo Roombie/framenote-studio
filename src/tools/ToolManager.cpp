@@ -24,14 +24,4 @@ Tool* ToolManager::activeTool() {
     return it != m_tools.end() ? it->second.get() : nullptr;
 }
 
-void ToolManager::snapshotBefore(Document& doc, int frameIndex) {
-    auto& frame = doc.frame(frameIndex);
-    Snapshot snap;
-    snap.frameIndex   = frameIndex;
-    snap.bufferWidth  = frame.bufferWidth();
-    snap.bufferHeight = frame.bufferHeight();
-    snap.pixels       = frame.pixels();
-    m_history.push(std::move(snap));
-}
-
 } // namespace Framenote

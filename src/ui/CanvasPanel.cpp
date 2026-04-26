@@ -67,22 +67,18 @@ void CanvasPanel::render() {
         m_renderer->uploadOnionFrame(prev, m_timeline->onionSkinOpacity());
     }
 
-    // Draw checkerboard
     ImDrawList* dl = ImGui::GetWindowDrawList();
-    float cs = m_zoom;
-    for (float y = originY; y < originY + canvasH; y += cs * 2)
-        for (float x = originX; x < originX + canvasW; x += cs * 2) {
-            // Top-left and bottom-right = light
-            dl->AddRectFilled({x,    y   }, {x+cs,    y+cs   }, IM_COL32(204,204,204,255));
-            dl->AddRectFilled({x+cs, y+cs}, {x+cs*2,  y+cs*2 }, IM_COL32(204,204,204,255));
-            // Top-right and bottom-left = dark
-            dl->AddRectFilled({x+cs, y   }, {x+cs*2,  y+cs   }, IM_COL32(153,153,153,255));
-            dl->AddRectFilled({x,    y+cs}, {x+cs,    y+cs*2 }, IM_COL32(153,153,153,255));
-        }
 
-    // Canvas texture + border
+    // Draw pre-rendered checkerboard texture (transparency grid).
+    // Built once in CanvasRenderer and reused every frame — no per-pixel loops.
+    ImTextureID checker = (ImTextureID)(intptr_t)m_renderer->checkerboardTexture();
+    dl->AddImage(checker, {originX,originY}, {originX+canvasW,originY+canvasH});
+
+    // Draw canvas texture on top
     ImTextureID tid = (ImTextureID)(intptr_t)m_renderer->canvasTexture();
     dl->AddImage(tid, {originX,originY}, {originX+canvasW,originY+canvasH});
+
+    // Canvas border
     dl->AddRect({originX,originY},{originX+canvasW,originY+canvasH},
                 IM_COL32(80,80,80,255), 0.f, 0, 2.f);
 

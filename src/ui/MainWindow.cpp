@@ -340,9 +340,10 @@ void MainWindow::renderCanvasSizeDialog() {
                 for (int i = 0; i < tab->document->frameCount(); ++i)
                     tab->document->frame(i).expandBuffer(m_newCanvasW, m_newCanvasH);
                 tab->document->setCanvasSize(m_newCanvasW, m_newCanvasH);
-                int bufW = m_newCanvasW > oldW ? m_newCanvasW : oldW;
-                int bufH = m_newCanvasH > oldH ? m_newCanvasH : oldH;
-                tab->renderer->resize(bufW, bufH);
+                // Keep renderer dimensions aligned with the visible canvas size.
+                // Frame buffers may remain larger internally after shrink, and
+                // CanvasRenderer::uploadFrame() already crops to the renderer size.
+                tab->renderer->resize(m_newCanvasW, m_newCanvasH);
                 tab->document->markDirty();
             }
             m_showCanvasSizeDialog = false;
