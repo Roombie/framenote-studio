@@ -8,22 +8,53 @@ A pixel art and frame-by-frame animation tool built with C++, SDL3, and Dear ImG
 
 ## Mascot
 
-Meet **Nibbit** — the official Framenote Studio mascot. Drawn in Framenote itself. 🐰
+Meet **Nibbit** — the official Framenote Studio mascot.
 
 ---
 
 ## Features (v0.1)
 
-- **Pixel art canvas** — draw with precise per-pixel control
-- **Frame-by-frame animation** — add, delete, duplicate and reorder frames
-- **Onion skinning** — see the previous frame as a ghost while drawing
-- **Timeline** — play, pause, loop animations at any FPS
-- **32-color palette** — pixel-art friendly default palette including Nibbit blue
-- **Tools** — Pencil, Eraser, Fill (bucket), Eyedropper
-- **Canvas resize** — resize with pixel data preserved outside bounds
-- **Zoom & pan** — scroll to zoom, middle mouse or Space+drag to pan
-- **GIF export** — export animations as GIF
-- **Save/load** — `.framenote` file format (JSON + base64 PNG frames)
+**Drawing**
+- Pencil, Eraser, Fill (flood fill), Eyedropper tools
+- 32-color palette including Nibbit blue
+- Canvas resize with pixel data preserved outside bounds
+- Mouse coordinates shown in real time (including negative outside canvas)
+
+**Animation**
+- Frame-by-frame timeline — add, delete, duplicate frames
+- Playback with loop support and adjustable FPS
+- Onion skinning with adjustable opacity
+
+**Multi-tab workflow**
+- Multiple documents open at once
+- Drag tabs to reorder
+- Home tab with New Document and Open File
+- Unsaved changes dialog on close and quit
+
+**Zoom & navigation**
+- Scroll wheel zoom toward cursor
+- Middle mouse or Space+drag to pan
+- +/- keys to zoom, Ctrl+0 to reset
+- Arrow keys to navigate frames
+
+**File operations**
+- Save / Open `.framenote` files
+- Export as GIF, PNG (single frame), PNG sequence
+- Native Windows file dialogs
+
+**UI**
+- Dark and light theme
+- Keyboard shortcuts: B, E, F, I (tools), C (canvas size), O (onion skin), Ctrl+N/O/S/Z/Y
+- Per-tab independent undo/redo history (up to 50 steps)
+
+---
+
+## Known issues (v0.1)
+
+- Tool buttons show `?` instead of icons — coming in v0.2
+- Brush size is fixed at 1px — coming in v0.2
+- Recent files list not yet implemented — coming in v0.2
+- Windows only — macOS and Linux support coming in v0.3
 
 ---
 
@@ -40,13 +71,19 @@ Meet **Nibbit** — the official Framenote Studio mascot. Drawn in Framenote its
 
 ---
 
+## Installation
+
+Download the latest release, extract the zip, and run `FramenoteStudio.exe`. No installer needed.
+
+---
+
 ## Building (Windows)
 
 ### Prerequisites
 
 - CMake 3.20+
 - Visual Studio 2022
-- SDL3 dev libraries (`SDL3-devel-x.x.x-VC.zip` from [libsdl.org](https://github.com/libsdl-org/SDL/releases))
+- SDL3 dev libraries from [github.com/libsdl-org/SDL/releases](https://github.com/libsdl-org/SDL/releases)
 
 ### Steps
 
@@ -73,7 +110,7 @@ build\bin\Debug\FramenoteStudio.exe
 
 ### macOS / Linux
 
-Coming in a future release. The codebase is designed for cross-platform porting.
+Coming in v0.3. The codebase is designed for cross-platform porting — `core/` has zero SDL/ImGui dependencies.
 
 ---
 
@@ -82,11 +119,18 @@ Coming in a future release. The codebase is designed for cross-platform porting.
 | Action | Input |
 |---|---|
 | Draw | Left click / drag |
-| Erase | Select eraser tool + left click |
-| Fill | Select fill tool + left click |
-| Zoom in/out | Scroll wheel |
+| Erase | E key, then left click |
+| Fill | F key, then left click |
+| Eyedropper | I key, then left click |
+| Pencil | B key |
+| Zoom in/out | Scroll wheel or +/- keys |
+| Reset zoom | Ctrl+0 |
 | Pan | Middle mouse drag or Space + left drag |
-| Select color | Click palette swatch |
+| Previous/next frame | Left/Right arrow |
+| Toggle onion skin | O |
+| Canvas size | C |
+| Undo/Redo | Ctrl+Z / Ctrl+Y |
+| New / Open / Save | Ctrl+N / Ctrl+O / Ctrl+S |
 
 ---
 
@@ -95,31 +139,38 @@ Coming in a future release. The codebase is designed for cross-platform porting.
 ```
 framenote-studio/
 ├── src/
-│   ├── main.cpp              # Entry point, SDL3 + ImGui init
-│   ├── core/                 # Pure logic — no SDL/ImGui dependencies
-│   │   ├── Document.cpp      # Root data structure
-│   │   ├── Frame.cpp         # Pixel buffer per frame
-│   │   ├── Palette.cpp       # 32-color palette
-│   │   └── Timeline.cpp      # Playback engine
-│   ├── tools/                # Drawing tools
-│   │   ├── PencilTool.cpp    # Bresenham line algorithm
+│   ├── main.cpp                  # Entry point, SDL3 + ImGui init, main loop
+│   ├── core/                     # Pure logic -- no SDL/ImGui dependencies
+│   │   ├── Document.cpp          # Root data structure
+│   │   ├── Frame.cpp             # Pixel buffer per frame (ARGB8888)
+│   │   ├── DocumentTab.cpp       # Owns Document, Timeline, History, Renderer per tab
+│   │   ├── History.cpp           # Undo/redo with pixel snapshots
+│   │   ├── Palette.cpp           # 32-color palette
+│   │   └── Timeline.cpp          # Playback engine with delta time
+│   ├── tools/                    # Drawing tools (strategy pattern)
+│   │   ├── PencilTool.cpp        # Bresenham line algorithm
 │   │   ├── EraserTool.cpp
-│   │   └── FillTool.cpp      # BFS flood fill
+│   │   ├── FillTool.cpp          # BFS flood fill
+│   │   └── EyedropperTool.cpp    # Picks closest palette color
 │   ├── renderer/
-│   │   └── CanvasRenderer.cpp
-│   ├── ui/                   # Dear ImGui panels
-│   │   ├── MainWindow.cpp
-│   │   ├── CanvasPanel.cpp
+│   │   └── CanvasRenderer.cpp    # SDL textures, pre-rendered checkerboard
+│   ├── ui/                       # Dear ImGui panels
+│   │   ├── MainWindow.cpp        # Menu bar, dialogs, keyboard shortcuts
+│   │   ├── TabManager.cpp        # Multi-tab system with drag reorder
+│   │   ├── CanvasPanel.cpp       # Drawing surface, zoom/pan, coordinates
 │   │   ├── TimelinePanel.cpp
 │   │   ├── ToolsPanel.cpp
-│   │   └── PalettePanel.cpp
+│   │   ├── PalettePanel.cpp
+│   │   └── Theme.cpp             # Dark/light theme (Nibbit blue accent)
 │   └── io/
-│       ├── FileManager.cpp   # .framenote save/load
-│       └── GifExporter.cpp
-├── include/                  # Headers
+│       ├── FileManager.cpp       # .framenote save/load (JSON + base64)
+│       ├── FileDialog.cpp        # Native Win32 file dialogs
+│       ├── GifExporter.cpp
+│       └── PngExporter.cpp       # Single frame + sequence
+├── include/                      # Headers mirroring src/ structure
 ├── assets/
-│   └── nibbit.ico            # App icon
-├── third_party/              # vendored deps (not committed)
+│   └── nibbit.ico                # App icon (hand-drawn 16x16 + 256x256)
+├── third_party/                  # Vendored deps (not committed)
 │   ├── imgui/
 │   ├── stb/
 │   ├── nlohmann/
@@ -131,16 +182,17 @@ framenote-studio/
 
 ## Roadmap
 
-- [ ] Undo / redo (`Ctrl+Z` / `Ctrl+Y`)
-- [ ] Keyboard shortcuts (B, E, F, I for tools)
-- [ ] New document dialog
-- [ ] PNG export
-- [ ] Multiple documents (tab system)
+**v0.2**
+- [ ] Tool icons
+- [ ] Brush size control
 - [ ] Custom palettes
+- [ ] Recent files list
 - [ ] Layer system
+
+**v0.3**
 - [ ] Audio per frame (Flipnote style)
-- [ ] Web build via Emscripten
 - [ ] macOS + Linux builds
+- [ ] Web build via Emscripten
 
 ---
 

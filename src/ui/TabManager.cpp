@@ -11,8 +11,8 @@
 
 namespace Framenote {
 
-TabManager::TabManager(SDL_Renderer* renderer)
-    : m_sdlRenderer(renderer)
+TabManager::TabManager(SDL_Renderer* renderer, ToolIcons* icons)
+    : m_sdlRenderer(renderer), m_icons(icons)
 {}
 
 void TabManager::render(ToolManager& toolManager) {
@@ -500,10 +500,9 @@ void TabManager::renderDocumentTab(DocumentTab& tab, ToolManager& toolManager) {
     // Each tab has its own independent Document, Timeline, History and
     // CanvasRenderer. Zoom/pan state also lives in DocumentTab so it
     // persists when switching between tabs.
-    ToolsPanel(&toolManager).render();
+    ToolsPanel(&toolManager, m_icons).render();
     PalettePanel(tab.document.get()).render();
     TimelinePanel(tab.document.get(), tab.timeline.get()).render();
-
     CanvasPanel(
         tab.document.get(),
         tab.timeline.get(),

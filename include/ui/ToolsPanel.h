@@ -1,19 +1,19 @@
 #pragma once
-
 #include "tools/ToolManager.h"
+#include "IconLoader.h"
 
 namespace Framenote {
 
-// Left sidebar: tool buttons (Pencil, Eraser, Fill, Eyedropper).
-// Stateless beyond which tool is active.
 class ToolsPanel {
 public:
-    explicit ToolsPanel(ToolManager* toolManager);
+    ToolsPanel(ToolManager* toolManager, ToolIcons* icons)
+        : m_toolManager(toolManager), m_icons(icons) {}
 
     void render();
 
 private:
     ToolManager* m_toolManager;
+    ToolIcons*   m_icons;
 };
 
 } // namespace Framenote

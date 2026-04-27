@@ -20,6 +20,7 @@ C:\framenote-studio\src\ui\Theme.cpp;C:\framenote-studio\build\FramenoteStudio.d
 C:\framenote-studio\src\ui\TabManager.cpp;C:\framenote-studio\build\FramenoteStudio.dir\Debug\TabManager.obj
 C:\framenote-studio\src\ui\PalettePanel.cpp;C:\framenote-studio\build\FramenoteStudio.dir\Debug\PalettePanel.obj
 C:\framenote-studio\src\ui\CanvasPanel.cpp;C:\framenote-studio\build\FramenoteStudio.dir\Debug\CanvasPanel.obj
+C:\framenote-studio\src\ui\IconLoader.cpp;C:\framenote-studio\build\FramenoteStudio.dir\Debug\IconLoader.obj
 C:\framenote-studio\src\io\FileManager.cpp;C:\framenote-studio\build\FramenoteStudio.dir\Debug\FileManager.obj
 C:\framenote-studio\src\io\GifExporter.cpp;C:\framenote-studio\build\FramenoteStudio.dir\Debug\GifExporter.obj
 C:\framenote-studio\src\io\PngExporter.cpp;C:\framenote-studio\build\FramenoteStudio.dir\Debug\PngExporter.obj

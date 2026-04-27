@@ -6,12 +6,13 @@
 #include <SDL3/SDL.h>
 #include "core/DocumentTab.h"
 #include "tools/ToolManager.h"
+#include "ui/IconLoader.h"
 
 namespace Framenote {
 
 class TabManager {
 public:
-    explicit TabManager(SDL_Renderer* renderer);
+    explicit TabManager(SDL_Renderer* renderer, ToolIcons* icons = nullptr);
 
     void render(ToolManager& toolManager);
     void newDocument(const std::string& name, int w, int h, int fps);
@@ -47,6 +48,7 @@ private:
     int  m_newDocH        = 128;
     int  m_newDocFps      = 8;
     char m_newDocName[64] = "untitled";
+    ToolIcons* m_icons = nullptr;
 };
 
 } // namespace Framenote

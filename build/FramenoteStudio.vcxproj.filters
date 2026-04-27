@@ -67,6 +67,9 @@
     <ClCompile Include="C:\framenote-studio\src\ui\CanvasPanel.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="C:\framenote-studio\src\ui\IconLoader.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
     <ClCompile Include="C:\framenote-studio\src\io\FileManager.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>

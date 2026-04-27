@@ -9,10 +9,11 @@
 #include "ui/Theme.h"
 #include "ui/MainWindow.h"
 #include "ui/TabManager.h"
+#include "ui/IconLoader.h"
 #include "tools/ToolManager.h"
 
-static constexpr int   WINDOW_W   = 1280;
-static constexpr int   WINDOW_H   = 800;
+static constexpr int WINDOW_W = 1280;
+static constexpr int WINDOW_H = 800;
 
 int main(int argc, char* argv[]) {
     (void)argc; (void)argv;
@@ -23,7 +24,7 @@ int main(int argc, char* argv[]) {
     }
 
     SDL_Window* window = SDL_CreateWindow(
-        "Framenote Studio v0.1",
+        "Framenote Studio v0.2",
         WINDOW_W, WINDOW_H,
         SDL_WINDOW_RESIZABLE | SDL_WINDOW_HIGH_PIXEL_DENSITY
     );
@@ -43,33 +44,34 @@ int main(int argc, char* argv[]) {
 
     SDL_SetRenderVSync(renderer, 1);
 
-    // Dear ImGui
     IMGUI_CHECKVERSION();
     ImGui::CreateContext();
     ImGuiIO& io = ImGui::GetIO();
     io.IniFilename = "imgui.ini";
     (void)io;
 
-    // DPI fix
     float dpiScale = SDL_GetWindowDisplayScale(window);
     ImGui::GetStyle().ScaleAllSizes(dpiScale);
     ImGui::GetIO().FontGlobalScale = dpiScale;
 
-    // Apply Framenote dark theme
     Framenote::Theme::applyDark();
 
     ImGui_ImplSDL3_InitForSDLRenderer(window, renderer);
     ImGui_ImplSDLRenderer3_Init(renderer);
 
-    // App state
+    // Load icons before TabManager so they can be passed in
+    Framenote::ToolIcons icons;
+    if (!icons.load(renderer))
+        SDL_Log("Warning: some tool icons failed to load");
+
     Framenote::ToolManager toolManager;
-    Framenote::TabManager  tabManager(renderer);
+    Framenote::TabManager  tabManager(renderer, &icons);
     Framenote::MainWindow  mainWindow(&tabManager, &toolManager);
 
-    // Main loop
-    bool running = true;
-    bool pendingQuit = false;
+    bool running      = true;
+    bool pendingQuit  = false;
     bool showQuitDialog = false;
+
     while (running) {
         SDL_Event event;
         while (SDL_PollEvent(&event)) {
@@ -81,7 +83,6 @@ int main(int argc, char* argv[]) {
                 pendingQuit = true;
         }
 
-        // Quit confirmation if any unsaved tabs
         if (pendingQuit) {
             pendingQuit = false;
             if (tabManager.hasUnsavedTabs())
@@ -100,7 +101,6 @@ int main(int argc, char* argv[]) {
             Uint64 now = SDL_GetPerformanceCounter();
             float deltaTime = (float)(now - lastTime) / (float)SDL_GetPerformanceFrequency();
             lastTime = now;
-            // Clamp delta to avoid huge jumps after alt-tab or breakpoints
             if (deltaTime > 0.1f) deltaTime = 0.1f;
             auto* tab = tabManager.activeTab();
             if (tab) tab->timeline->tick(deltaTime);
@@ -108,7 +108,6 @@ int main(int argc, char* argv[]) {
 
         mainWindow.render();
 
-        // Quit confirmation dialog
         if (showQuitDialog) ImGui::OpenPopup("Quit##confirm");
         if (ImGui::BeginPopupModal("Quit##confirm", nullptr,
                 ImGuiWindowFlags_AlwaysAutoResize)) {
@@ -128,7 +127,6 @@ int main(int argc, char* argv[]) {
 
         ImGui::Render();
 
-        // SDL clear color matches theme
         if (Framenote::Theme::current() == Framenote::ThemeMode::Dark)
             SDL_SetRenderDrawColor(renderer, 20, 18, 16, 255);
         else
@@ -142,6 +140,7 @@ int main(int argc, char* argv[]) {
     ImGui_ImplSDLRenderer3_Shutdown();
     ImGui_ImplSDL3_Shutdown();
     ImGui::DestroyContext();
+    icons.destroy();
     SDL_DestroyRenderer(renderer);
     SDL_DestroyWindow(window);
     SDL_Quit();

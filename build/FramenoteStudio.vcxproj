@@ -358,6 +358,7 @@ if %errorlevel% neq 0 goto :VCEnd</Command>
     <ClCompile Include="C:\framenote-studio\src\ui\TabManager.cpp" />
     <ClCompile Include="C:\framenote-studio\src\ui\PalettePanel.cpp" />
     <ClCompile Include="C:\framenote-studio\src\ui\CanvasPanel.cpp" />
+    <ClCompile Include="C:\framenote-studio\src\ui\IconLoader.cpp" />
     <ClCompile Include="C:\framenote-studio\src\io\FileManager.cpp" />
     <ClCompile Include="C:\framenote-studio\src\io\GifExporter.cpp" />
     <ClCompile Include="C:\framenote-studio\src\io\PngExporter.cpp" />

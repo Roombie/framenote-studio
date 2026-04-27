@@ -39,6 +39,7 @@ set(SOURCES
     src/ui/TabManager.cpp
     src/ui/PalettePanel.cpp
     src/ui/CanvasPanel.cpp
+    src/ui/IconLoader.cpp
 
     # I/O
     src/io/FileManager.cpp
