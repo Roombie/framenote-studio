@@ -234,11 +234,16 @@ void CanvasPanel::render() {
     if (spaceHeld && inWindow)
         ImGui::SetMouseCursor(ImGuiMouseCursor_ResizeAll);
 
-    // Zoom level display
-    dl->AddText({panelPos.x + 4, panelPos.y + panelSize.y - 20},
-                IM_COL32(150,150,150,200),
-                (std::to_string((int)(m_zoom * 100)) + "%").c_str());
+     // Bottom-left overlay: zoom level + canvas coordinates
+    std::string overlay = std::to_string((int)(m_zoom * 100)) + "%";
+    
+    int px = (int)((mp.x - originX) / canvasW * cw);
+    int py = (int)((mp.y - originY) / canvasH * ch);
+    overlay += "   X: " + std::to_string(px) + "  Y: " + std::to_string(py);
 
+    dl->AddText({panelPos.x + 4, panelPos.y + panelSize.y - 20},
+                IM_COL32(150,150,150,200), overlay.c_str());
+ 
     ImGui::End();
 }
 

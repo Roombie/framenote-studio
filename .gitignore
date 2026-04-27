@@ -22,3 +22,9 @@ third_party/gif-h/
 # Runtime outputs
 output.gif
 imgui.ini
+
+imgui.ini
+
+
+**/imgui.ini
+
