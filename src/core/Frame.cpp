@@ -59,6 +59,14 @@ void Frame::setVisibleSize(int w, int h) {
     m_height = h;
 }
 
+void Frame::restoreBuffer(std::vector<uint8_t> pixels, int bufW, int bufH) {
+    m_pixels       = std::move(pixels);
+    m_bufferWidth  = bufW;
+    m_bufferHeight = bufH;
+    // Visible size is managed by the document/canvas system separately —
+    // we only restore the raw buffer here.
+}
+
 void Frame::expandBuffer(int newW, int newH) {
     if (newW <= m_bufferWidth && newH <= m_bufferHeight) return;
 

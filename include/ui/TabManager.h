@@ -4,6 +4,7 @@
 #include <memory>
 #include <string>
 #include <SDL3/SDL.h>
+#include <imgui.h>
 #include "core/DocumentTab.h"
 #include "tools/ToolManager.h"
 #include "ui/IconLoader.h"
@@ -36,6 +37,7 @@ private:
     void renderHomeTab(ToolManager& toolManager);
     void renderDocumentTab(DocumentTab& tab, ToolManager& toolManager);
     void renderTabBar();
+    void setupDefaultDockLayout(ImGuiID dockspaceId);
 
     SDL_Renderer*                             m_sdlRenderer;
     std::vector<std::unique_ptr<DocumentTab>> m_tabs;
@@ -43,12 +45,13 @@ private:
     int                                       m_pendingCloseIndex = -1;
     int                                       m_draggingTab       = -1;
 
-    bool m_showNewDialog  = false;
-    int  m_newDocW        = 128;
-    int  m_newDocH        = 128;
-    int  m_newDocFps      = 8;
-    char m_newDocName[64] = "untitled";
-    ToolIcons* m_icons = nullptr;
+    bool m_showNewDialog   = false;
+    bool m_dockInitialized = false;  // true after first-run layout is built
+    int  m_newDocW         = 128;
+    int  m_newDocH         = 128;
+    int  m_newDocFps       = 8;
+    char m_newDocName[64]  = "untitled";
+    ToolIcons* m_icons     = nullptr;
 };
 
 } // namespace Framenote

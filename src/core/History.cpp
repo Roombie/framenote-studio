@@ -3,32 +3,34 @@
 namespace Framenote {
 
 void History::push(Snapshot snapshot) {
-    m_undoStack.push_back(std::move(snapshot));
-
-    // Trim oldest if over limit
-    if ((int)m_undoStack.size() > MAX_STEPS)
-        m_undoStack.erase(m_undoStack.begin());
-
-    // Any new action clears redo
+    HistoryEntry entry;
+    entry.frames.push_back(std::move(snapshot));
+    // canvasWidth/Height stay 0 — marks this as a drawing action
+    m_undoStack.push_back(std::move(entry));
+    trimUndo();
     m_redoStack.clear();
 }
 
-Snapshot History::undo(Snapshot current) {
-    // Push current state to redo stack
-    m_redoStack.push_back(std::move(current));
+void History::pushResize(std::vector<Snapshot> allFrames, int oldCanvasW, int oldCanvasH) {
+    HistoryEntry entry;
+    entry.canvasWidth  = oldCanvasW;
+    entry.canvasHeight = oldCanvasH;
+    entry.frames       = std::move(allFrames);
+    m_undoStack.push_back(std::move(entry));
+    trimUndo();
+    m_redoStack.clear();
+}
 
-    // Pop and return previous state
-    Snapshot prev = std::move(m_undoStack.back());
+HistoryEntry History::undo(HistoryEntry current) {
+    m_redoStack.push_back(std::move(current));
+    HistoryEntry prev = std::move(m_undoStack.back());
     m_undoStack.pop_back();
     return prev;
 }
 
-Snapshot History::redo(Snapshot current) {
-    // Push current state to undo stack
+HistoryEntry History::redo(HistoryEntry current) {
     m_undoStack.push_back(std::move(current));
-
-    // Pop and return next state
-    Snapshot next = std::move(m_redoStack.back());
+    HistoryEntry next = std::move(m_redoStack.back());
     m_redoStack.pop_back();
     return next;
 }
@@ -36,6 +38,11 @@ Snapshot History::redo(Snapshot current) {
 void History::clear() {
     m_undoStack.clear();
     m_redoStack.clear();
+}
+
+void History::trimUndo() {
+    while ((int)m_undoStack.size() > MAX_STEPS)
+        m_undoStack.erase(m_undoStack.begin());
 }
 
 } // namespace Framenote

@@ -5,11 +5,8 @@
 namespace Framenote {
 
 void ToolsPanel::render() {
-    ImGui::SetNextWindowPos({ImGui::GetIO().DisplaySize.x - 60, 62},
-                             ImGuiCond_FirstUseEver);
-    ImGui::SetNextWindowSize({50, 220}, ImGuiCond_FirstUseEver);
-    ImGui::Begin("Tools", nullptr,
-        ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoScrollbar);
+    ImGui::SetNextWindowSizeConstraints({50, 150}, {80, FLT_MAX});
+    ImGui::Begin("Tools", nullptr, ImGuiWindowFlags_NoScrollbar);
 
     struct ToolBtn {
         ToolType      type;
@@ -25,11 +22,6 @@ void ToolsPanel::render() {
         { ToolType::Eyedropper, m_icons ? m_icons->eyedropper : nullptr, "I", "Eyedropper (I)" },
     };
 
-    // Tint white icons dark when using the light theme
-    ImVec4 tint = (Theme::current() == ThemeMode::Light)
-        ? ImVec4(0.15f, 0.15f, 0.15f, 1.0f)
-        : ImVec4(1.0f,  1.0f,  1.0f,  1.0f);
-
     for (auto& btn : buttons) {
         bool active = (m_toolManager->activeToolType() == btn.type);
 
@@ -41,10 +33,14 @@ void ToolsPanel::render() {
 
         if (btn.icon) {
             ImTextureID tid = (ImTextureID)(intptr_t)btn.icon;
+            ImVec4 tint = (Theme::current() == ThemeMode::Light)
+                ? ImVec4(0.15f, 0.15f, 0.15f, 1.0f)
+                : ImVec4(1.0f,  1.0f,  1.0f,  1.0f);
             if (ImGui::ImageButton(btn.fallback, tid, btnSize,
                     {0,0}, {1,1}, {0,0,0,0}, tint))
                 m_toolManager->selectTool(btn.type);
         } else {
+            // Fallback text button if icon failed to load
             if (ImGui::Button(btn.fallback, btnSize))
                 m_toolManager->selectTool(btn.type);
         }

@@ -16,6 +16,39 @@ static const char* FILTER_FRAMENOTE = "Framenote Files\0*.framenote\0All Files\0
 static const char* FILTER_GIF       = "GIF Files\0*.gif\0All Files\0*.*\0";
 static const char* FILTER_PNG       = "PNG Files\0*.png\0All Files\0*.*\0";
 
+// Captures all frames + canvas size as a HistoryEntry to pass into undo/redo
+static HistoryEntry captureCurrentEntry(DocumentTab* tab) {
+    HistoryEntry entry;
+    entry.canvasWidth  = tab->document->canvasSize().width;
+    entry.canvasHeight = tab->document->canvasSize().height;
+    for (int i = 0; i < tab->document->frameCount(); ++i) {
+        auto& f = tab->document->frame(i);
+        Snapshot s;
+        s.frameIndex   = i;
+        s.bufferWidth  = f.bufferWidth();
+        s.bufferHeight = f.bufferHeight();
+        s.pixels       = f.pixels();
+        entry.frames.push_back(std::move(s));
+    }
+    return entry;
+}
+
+// Applies a restored HistoryEntry — handles both drawing and resize entries
+static void applyHistoryEntry(DocumentTab* tab, HistoryEntry& entry) {
+    if (entry.canvasWidth > 0 &&
+        (entry.canvasWidth  != tab->document->canvasSize().width ||
+         entry.canvasHeight != tab->document->canvasSize().height)) {
+        tab->document->setCanvasSize(entry.canvasWidth, entry.canvasHeight);
+        tab->renderer->resize(entry.canvasWidth, entry.canvasHeight);
+        for (int i = 0; i < tab->document->frameCount(); ++i)
+            tab->document->frame(i).setVisibleSize(entry.canvasWidth, entry.canvasHeight);
+    }
+    for (auto& snap : entry.frames)
+        tab->document->frame(snap.frameIndex).restoreBuffer(
+            std::move(snap.pixels), snap.bufferWidth, snap.bufferHeight);
+    tab->document->markDirty();
+}
+
 MainWindow::MainWindow(TabManager* tabManager, ToolManager* toolManager)
     : m_tabManager(tabManager)
     , m_toolManager(toolManager)
@@ -113,6 +146,27 @@ void MainWindow::render() {
             auto* tab = m_tabManager->activeTab();
             if (tab)
                 tab->timeline->setOnionSkin(!tab->timeline->onionSkinEnabled());
+        }
+
+        // Ctrl+Z -- Undo
+        if (ctrl && ImGui::IsKeyPressed(ImGuiKey_Z, false)) {
+            auto* tab = m_tabManager->activeTab();
+            if (tab && tab->history->canUndo()) {
+                HistoryEntry current = captureCurrentEntry(tab);
+                HistoryEntry restored = tab->history->undo(std::move(current));
+                applyHistoryEntry(tab, restored);
+            }
+        }
+
+        // Ctrl+Y / Ctrl+Shift+Z -- Redo
+        if (ctrl && (ImGui::IsKeyPressed(ImGuiKey_Y, false) ||
+                     (shift && ImGui::IsKeyPressed(ImGuiKey_Z, false)))) {
+            auto* tab = m_tabManager->activeTab();
+            if (tab && tab->history->canRedo()) {
+                HistoryEntry current = captureCurrentEntry(tab);
+                HistoryEntry restored = tab->history->redo(std::move(current));
+                applyHistoryEntry(tab, restored);
+            }
         }
     }
 }
@@ -232,16 +286,8 @@ void MainWindow::renderMenuBar() {
             ImGui::BeginDisabled(!canUndo);
             if (ImGui::MenuItem("Undo", "Ctrl+Z")) {
                 if (tab) {
-                    int fi = tab->timeline->currentFrame();
-                    auto& frame = tab->document->frame(fi);
-                    Snapshot current;
-                    current.frameIndex   = fi;
-                    current.bufferWidth  = frame.bufferWidth();
-                    current.bufferHeight = frame.bufferHeight();
-                    current.pixels       = frame.pixels();
-                    Snapshot restored = tab->history->undo(std::move(current));
-                    tab->document->frame(restored.frameIndex).pixels() = restored.pixels;
-                    tab->document->markDirty();
+                    HistoryEntry restored = tab->history->undo(captureCurrentEntry(tab));
+                    applyHistoryEntry(tab, restored);
                 }
             }
             ImGui::EndDisabled();
@@ -249,16 +295,8 @@ void MainWindow::renderMenuBar() {
             ImGui::BeginDisabled(!canRedo);
             if (ImGui::MenuItem("Redo", "Ctrl+Y")) {
                 if (tab) {
-                    int fi = tab->timeline->currentFrame();
-                    auto& frame = tab->document->frame(fi);
-                    Snapshot current;
-                    current.frameIndex   = fi;
-                    current.bufferWidth  = frame.bufferWidth();
-                    current.bufferHeight = frame.bufferHeight();
-                    current.pixels       = frame.pixels();
-                    Snapshot restored = tab->history->redo(std::move(current));
-                    tab->document->frame(restored.frameIndex).pixels() = restored.pixels;
-                    tab->document->markDirty();
+                    HistoryEntry restored = tab->history->redo(captureCurrentEntry(tab));
+                    applyHistoryEntry(tab, restored);
                 }
             }
             ImGui::EndDisabled();
@@ -429,12 +467,22 @@ void MainWindow::renderCanvasSizeDialog() {
             int oldW = tab->document->canvasSize().width;
             int oldH = tab->document->canvasSize().height;
             if (m_newCanvasW != oldW || m_newCanvasH != oldH) {
+                // Snapshot all frames as a single atomic resize entry
+                std::vector<Snapshot> frameSnaps;
+                for (int i = 0; i < tab->document->frameCount(); ++i) {
+                    auto& f = tab->document->frame(i);
+                    Snapshot snap;
+                    snap.frameIndex   = i;
+                    snap.bufferWidth  = f.bufferWidth();
+                    snap.bufferHeight = f.bufferHeight();
+                    snap.pixels       = f.pixels();
+                    frameSnaps.push_back(std::move(snap));
+                }
+                tab->history->pushResize(std::move(frameSnaps), oldW, oldH);
+
                 for (int i = 0; i < tab->document->frameCount(); ++i)
                     tab->document->frame(i).expandBuffer(m_newCanvasW, m_newCanvasH);
                 tab->document->setCanvasSize(m_newCanvasW, m_newCanvasH);
-                // Keep renderer dimensions aligned with the visible canvas size.
-                // Frame buffers may remain larger internally after shrink, and
-                // CanvasRenderer::uploadFrame() already crops to the renderer size.
                 tab->renderer->resize(m_newCanvasW, m_newCanvasH);
                 tab->document->markDirty();
             }

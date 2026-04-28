@@ -26,6 +26,13 @@ void PalettePanel::render() {
     ImGui::Separator();
 
     // ── Swatch grid ───────────────────────────────────────────────────────────
+    // Calculate how many swatches fit per row based on available width,
+    // accounting for item spacing between swatches. Minimum 1 per row.
+    float availW = ImGui::GetContentRegionAvail().x;
+    float itemSpacing  = ImGui::GetStyle().ItemSpacing.x;
+    int swatchesPerRow = (int)((availW + itemSpacing) / (SWATCH_SIZE + itemSpacing));
+    if (swatchesPerRow < 1) swatchesPerRow = 1;
+
     for (int i = 0; i < Palette::size(); ++i) {
         Color col = palette.color(i);
 
@@ -57,7 +64,7 @@ void PalettePanel::render() {
         }
 
         // Row wrap
-        if ((i + 1) % SWATCHES_PER_ROW != 0)
+        if ((i + 1) % swatchesPerRow != 0)
             ImGui::SameLine();
 
         ImGui::PopID();

@@ -51,6 +51,10 @@ public:
     // Pixels outside the old buffer area are zeroed (transparent).
     void expandBuffer(int newW, int newH);
 
+    // Fully replace pixel data and buffer dimensions — used by undo/redo
+    // to restore a frame to an exact previous state including its buffer size.
+    void restoreBuffer(std::vector<uint8_t> pixels, int bufW, int bufH);
+
 private:
     int                  m_width;         // visible canvas width
     int                  m_height;        // visible canvas height

@@ -48,6 +48,7 @@ int main(int argc, char* argv[]) {
     ImGui::CreateContext();
     ImGuiIO& io = ImGui::GetIO();
     io.IniFilename = "imgui.ini";
+    io.ConfigFlags |= ImGuiConfigFlags_DockingEnable;  // Enable docking
     (void)io;
 
     float dpiScale = SDL_GetWindowDisplayScale(window);

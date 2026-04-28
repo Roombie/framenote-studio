@@ -21,22 +21,6 @@ CanvasPanel::CanvasPanel(Document* document, Timeline* timeline,
     , m_history(history)
 {}
 
-static Snapshot currentSnapshot(Document& doc, int frameIndex) {
-    auto& frame = doc.frame(frameIndex);
-    Snapshot snap;
-    snap.frameIndex   = frameIndex;
-    snap.bufferWidth  = frame.bufferWidth();
-    snap.bufferHeight = frame.bufferHeight();
-    snap.pixels       = frame.pixels();
-    return snap;
-}
-
-static void applySnapshot(Document& doc, const Snapshot& snap) {
-    auto& frame = doc.frame(snap.frameIndex);
-    frame.pixels() = snap.pixels;
-    doc.markDirty();
-}
-
 void CanvasPanel::render() {
     ImGuiIO& io = ImGui::GetIO();
 
@@ -124,14 +108,10 @@ void CanvasPanel::render() {
         if (ImGui::IsKeyPressed(ImGuiKey_LeftArrow, false))
             m_timeline->prevFrame();
         // Shift+Left/Right jump to first/last frame
-        if (io.KeyShift && ImGui::IsKeyPressed(ImGuiKey_LeftArrow, false)) {
-            if (m_timeline->isPlaying()) m_timeline->pause();
-                m_timeline->setCurrentFrame(0);
-        }
-        if (io.KeyShift && ImGui::IsKeyPressed(ImGuiKey_RightArrow, false)) {
-            if (m_timeline->isPlaying()) m_timeline->pause();
+        if (io.KeyShift && ImGui::IsKeyPressed(ImGuiKey_LeftArrow, false))
+            m_timeline->setCurrentFrame(0);
+        if (io.KeyShift && ImGui::IsKeyPressed(ImGuiKey_RightArrow, false))
             m_timeline->setCurrentFrame(m_timeline->frameCount() - 1);
-        }
         // Space toggles play/pause
         if (ImGui::IsKeyPressed(ImGuiKey_Space, false))
             m_timeline->isPlaying() ? m_timeline->pause() : m_timeline->play();
@@ -175,27 +155,6 @@ void CanvasPanel::render() {
         m_panY = (m_panY - (mp.y - (panelPos.y + panelSize.y * 0.5f))) * ratio
                  + (mp.y - (panelPos.y + panelSize.y * 0.5f));
         io.MouseWheel = 0.f;
-    }
-
-    // ── Undo / Redo ───────────────────────────────────────────────────────────
-    if (ctrlHeld && !popupOpen) {
-        if (ImGui::IsKeyPressed(ImGuiKey_Z, false)) {
-            History& hist = m_history;
-            if (hist.canUndo()) {
-                int fi = m_timeline->currentFrame();
-                Snapshot restored = hist.undo(currentSnapshot(*m_document, fi));
-                applySnapshot(*m_document, restored);
-            }
-        }
-        if (ImGui::IsKeyPressed(ImGuiKey_Y, false) ||
-            (io.KeyShift && ImGui::IsKeyPressed(ImGuiKey_Z, false))) {
-            History& hist = m_history;
-            if (hist.canRedo()) {
-                int fi = m_timeline->currentFrame();
-                Snapshot restored = hist.redo(currentSnapshot(*m_document, fi));
-                applySnapshot(*m_document, restored);
-            }
-        }
     }
 
     // ── Pan ───────────────────────────────────────────────────────────────────

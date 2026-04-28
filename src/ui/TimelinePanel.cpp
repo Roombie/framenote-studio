@@ -1,6 +1,6 @@
 #include "ui/TimelinePanel.h"
-#include <imgui.h>
 #include "ui/Theme.h"
+#include <imgui.h>
 
 namespace Framenote {
 
@@ -28,10 +28,6 @@ bool TimelinePanel::iconButton(const char* id, SDL_Texture* icon,
 }
 
 void TimelinePanel::render() {
-    ImGui::SetNextWindowPos({4, ImGui::GetIO().DisplaySize.y - 160},
-                             ImGuiCond_FirstUseEver);
-    ImGui::SetNextWindowSize({ImGui::GetIO().DisplaySize.x - 8, 155},
-                              ImGuiCond_FirstUseEver);
     ImGui::Begin("Timeline", nullptr, ImGuiWindowFlags_NoScrollbar);
 
     renderPlaybackControls();
