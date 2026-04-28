@@ -124,10 +124,14 @@ void CanvasPanel::render() {
         if (ImGui::IsKeyPressed(ImGuiKey_LeftArrow, false))
             m_timeline->prevFrame();
         // Shift+Left/Right jump to first/last frame
-        if (io.KeyShift && ImGui::IsKeyPressed(ImGuiKey_LeftArrow, false))
-            m_timeline->setCurrentFrame(0);
-        if (io.KeyShift && ImGui::IsKeyPressed(ImGuiKey_RightArrow, false))
+        if (io.KeyShift && ImGui::IsKeyPressed(ImGuiKey_LeftArrow, false)) {
+            if (m_timeline->isPlaying()) m_timeline->pause();
+                m_timeline->setCurrentFrame(0);
+        }
+        if (io.KeyShift && ImGui::IsKeyPressed(ImGuiKey_RightArrow, false)) {
+            if (m_timeline->isPlaying()) m_timeline->pause();
             m_timeline->setCurrentFrame(m_timeline->frameCount() - 1);
+        }
         // Space toggles play/pause
         if (ImGui::IsKeyPressed(ImGuiKey_Space, false))
             m_timeline->isPlaying() ? m_timeline->pause() : m_timeline->play();
