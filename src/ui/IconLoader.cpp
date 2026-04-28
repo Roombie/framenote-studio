@@ -24,18 +24,37 @@ static SDL_Texture* loadPNG(SDL_Renderer* renderer, const char* path) {
 }
 
 bool ToolIcons::load(SDL_Renderer* renderer) {
+    // Drawing tools
     pencil     = loadPNG(renderer, "assets/icons/pencil_icon.png");
     eraser     = loadPNG(renderer, "assets/icons/eraser_icon.png");
     fill       = loadPNG(renderer, "assets/icons/fill_icon.png");
     eyedropper = loadPNG(renderer, "assets/icons/eyedropper_icon.png");
+
+    // Timeline controls
+    firstFrame = loadPNG(renderer, "assets/icons/first_frame_icon.png");
+    prevFrame  = loadPNG(renderer, "assets/icons/prev_frame_icon.png");
+    play       = loadPNG(renderer, "assets/icons/play_icon.png");
+    pause      = loadPNG(renderer, "assets/icons/pause_icon.png");
+    nextFrame  = loadPNG(renderer, "assets/icons/next_frame_icon.png");
+    lastFrame  = loadPNG(renderer, "assets/icons/last_frame_icon.png");
+
     return ok();
 }
 
 void ToolIcons::destroy() {
-    if (pencil)     { SDL_DestroyTexture(pencil);     pencil     = nullptr; }
-    if (eraser)     { SDL_DestroyTexture(eraser);     eraser     = nullptr; }
-    if (fill)       { SDL_DestroyTexture(fill);       fill       = nullptr; }
-    if (eyedropper) { SDL_DestroyTexture(eyedropper); eyedropper = nullptr; }
+    auto destroyTex = [](SDL_Texture*& t) {
+        if (t) { SDL_DestroyTexture(t); t = nullptr; }
+    };
+    destroyTex(pencil);
+    destroyTex(eraser);
+    destroyTex(fill);
+    destroyTex(eyedropper);
+    destroyTex(firstFrame);
+    destroyTex(prevFrame);
+    destroyTex(play);
+    destroyTex(pause);
+    destroyTex(nextFrame);
+    destroyTex(lastFrame);
 }
 
 } // namespace Framenote

@@ -1,17 +1,38 @@
 #include "ui/TimelinePanel.h"
 #include <imgui.h>
+#include "ui/Theme.h"
 
 namespace Framenote {
 
-TimelinePanel::TimelinePanel(Document* document, Timeline* timeline)
-    : m_document(document), m_timeline(timeline)
+TimelinePanel::TimelinePanel(Document* document, Timeline* timeline,
+                             ToolIcons* icons)
+    : m_document(document), m_timeline(timeline), m_icons(icons)
 {}
 
+bool TimelinePanel::iconButton(const char* id, SDL_Texture* icon,
+                               const char* fallback, ImVec2 size,
+                               const char* tooltip) {
+    bool clicked = false;
+    if (icon) {
+        ImTextureID tid = (ImTextureID)(intptr_t)icon;
+        ImVec4 tint = (Theme::current() == ThemeMode::Light)
+            ? ImVec4(0.15f, 0.15f, 0.15f, 1.0f)
+            : ImVec4(1.0f,  1.0f,  1.0f,  1.0f);
+        clicked = ImGui::ImageButton(id, tid, size, {0,0}, {1,1}, {0,0,0,0}, tint);
+    } else {
+        clicked = ImGui::Button(fallback, size);
+    }
+    if (tooltip && ImGui::IsItemHovered())
+        ImGui::SetTooltip("%s", tooltip);
+    return clicked;
+}
+
 void TimelinePanel::render() {
-    ImGui::SetNextWindowPos({4, ImGui::GetIO().DisplaySize.y - 160}, ImGuiCond_FirstUseEver);
-    ImGui::SetNextWindowSize({ImGui::GetIO().DisplaySize.x - 8, 155}, ImGuiCond_FirstUseEver);
-    ImGuiWindowFlags flags = ImGuiWindowFlags_NoScrollbar;
-    ImGui::Begin("Timeline", nullptr, flags);
+    ImGui::SetNextWindowPos({4, ImGui::GetIO().DisplaySize.y - 160},
+                             ImGuiCond_FirstUseEver);
+    ImGui::SetNextWindowSize({ImGui::GetIO().DisplaySize.x - 8, 155},
+                              ImGuiCond_FirstUseEver);
+    ImGui::Begin("Timeline", nullptr, ImGuiWindowFlags_NoScrollbar);
 
     renderPlaybackControls();
     ImGui::Separator();
@@ -21,43 +42,92 @@ void TimelinePanel::render() {
 }
 
 void TimelinePanel::renderPlaybackControls() {
-    // ── Play / Pause ──────────────────────────────────────────────────────────
-    if (m_timeline->isPlaying()) {
-        if (ImGui::Button("⏸ Pause")) m_timeline->pause();
+    ImVec2 btnSize = {28, 28};
+    bool   playing = m_timeline->isPlaying();
+    int    current = m_timeline->currentFrame();
+    int    total   = m_timeline->frameCount();
+
+    // |< First frame — auto-pauses if playing
+    ImGui::BeginDisabled(current == 0 && !playing);
+    if (iconButton("##first", m_icons ? m_icons->firstFrame : nullptr,
+                   "|<", btnSize, "First frame  (Shift+Left)")) {
+        if (playing) m_timeline->pause();
+        m_timeline->setCurrentFrame(0);
+    }
+    ImGui::EndDisabled();
+
+    ImGui::SameLine();
+
+    // < Previous frame — auto-pauses if playing
+    ImGui::BeginDisabled(current == 0 && !playing);
+    if (iconButton("##prev", m_icons ? m_icons->prevFrame : nullptr,
+                   "<", btnSize, "Previous frame  (Left arrow)")) {
+        if (playing) m_timeline->pause();
+        m_timeline->prevFrame();
+    }
+    ImGui::EndDisabled();
+
+    ImGui::SameLine();
+
+    // Play / Pause toggle
+    if (playing) {
+        if (iconButton("##pause", m_icons ? m_icons->pause : nullptr,
+                       "||", btnSize, "Pause  (Space)"))
+            m_timeline->pause();
     } else {
-        if (ImGui::Button("▶ Play"))  m_timeline->play();
+        if (iconButton("##play", m_icons ? m_icons->play : nullptr,
+                       ">", btnSize, "Play  (Space)"))
+            m_timeline->play();
     }
 
     ImGui::SameLine();
-    if (ImGui::Button("⏹ Stop"))      m_timeline->stop();
+
+    // > Next frame — auto-pauses if playing
+    ImGui::BeginDisabled(current == total - 1 && !playing);
+    if (iconButton("##next", m_icons ? m_icons->nextFrame : nullptr,
+                   ">", btnSize, "Next frame  (Right arrow)")) {
+        if (playing) m_timeline->pause();
+        m_timeline->nextFrame();
+    }
+    ImGui::EndDisabled();
 
     ImGui::SameLine();
-    if (ImGui::Button("|◀"))          m_timeline->setCurrentFrame(0);
+
+    // >| Last frame — auto-pauses if playing
+    ImGui::BeginDisabled(current == total - 1 && !playing);
+    if (iconButton("##last", m_icons ? m_icons->lastFrame : nullptr,
+                   ">|", btnSize, "Last frame  (Shift+Right)")) {
+        if (playing) m_timeline->pause();
+        m_timeline->setCurrentFrame(total - 1);
+    }
+    ImGui::EndDisabled();
 
     ImGui::SameLine();
-    if (ImGui::Button("◀"))           m_timeline->prevFrame();
+    ImGui::SetCursorPosX(ImGui::GetCursorPosX() + 8);
 
-    ImGui::SameLine();
-    if (ImGui::Button("▶##next"))     m_timeline->nextFrame();
-
-    // ── FPS slider ────────────────────────────────────────────────────────────
-    ImGui::SameLine();
-    ImGui::SetNextItemWidth(100.0f);
+    // FPS slider
+    ImGui::SetNextItemWidth(90.0f);
     int fps = m_timeline->fps();
-    if (ImGui::SliderInt("FPS", &fps, 1, 30))
+    if (ImGui::SliderInt("FPS", &fps, 1, 60))
         m_timeline->setFps(fps);
 
-    // ── Onion skin toggle ─────────────────────────────────────────────────────
     ImGui::SameLine();
+
+    // Onion skin
     bool onion = m_timeline->onionSkinEnabled();
     if (ImGui::Checkbox("Onion Skin", &onion))
         m_timeline->setOnionSkin(onion);
 
-    // ── Loop toggle ───────────────────────────────────────────────────────────
     ImGui::SameLine();
+
+    // Loop
     bool loop = m_timeline->looping();
     if (ImGui::Checkbox("Loop", &loop))
         m_timeline->setLooping(loop);
+
+    ImGui::SameLine();
+    ImGui::SetCursorPosX(ImGui::GetCursorPosX() + 8);
+    ImGui::TextDisabled("%d / %d", current + 1, total);
 }
 
 void TimelinePanel::renderFrameStrip() {
@@ -70,13 +140,13 @@ void TimelinePanel::renderFrameStrip() {
     for (int i = 0; i < frameCount; ++i) {
         ImGui::PushID(i);
 
-        // Highlight current frame
         if (i == current) {
-            ImGui::PushStyleColor(ImGuiCol_Button,        ImVec4(0.2f, 0.5f, 0.9f, 1.0f));
-            ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.3f, 0.6f, 1.0f, 1.0f));
+            ImGui::PushStyleColor(ImGuiCol_Button,
+                ImVec4(0.17f, 0.72f, 0.84f, 1.0f));
+            ImGui::PushStyleColor(ImGuiCol_ButtonHovered,
+                ImVec4(0.25f, 0.80f, 0.92f, 1.0f));
         }
 
-        // Frame button (no thumbnail yet — shows frame number)
         char label[8];
         snprintf(label, sizeof(label), "%d", i + 1);
         if (ImGui::Button(label, ImVec2(THUMB_SIZE, THUMB_SIZE)))
@@ -85,12 +155,14 @@ void TimelinePanel::renderFrameStrip() {
         if (i == current)
             ImGui::PopStyleColor(2);
 
-        // Right-click context menu per frame
         if (ImGui::BeginPopupContextItem("##FrameCtx")) {
-            if (ImGui::MenuItem("Duplicate")) m_document->duplicateFrame(i);
+            if (ImGui::MenuItem("Duplicate"))
+                m_document->duplicateFrame(i);
             if (ImGui::MenuItem("Delete") && frameCount > 1) {
                 m_document->deleteFrame(i);
                 m_timeline->setFrameCount(m_document->frameCount());
+                if (m_timeline->currentFrame() >= m_document->frameCount())
+                    m_timeline->setCurrentFrame(m_document->frameCount() - 1);
             }
             ImGui::EndPopup();
         }
@@ -99,12 +171,12 @@ void TimelinePanel::renderFrameStrip() {
         ImGui::PopID();
     }
 
-    // ── Add frame button ──────────────────────────────────────────────────────
     if (ImGui::Button("+##AddFrame", ImVec2(THUMB_SIZE, THUMB_SIZE))) {
         int newIdx = m_document->addFrame();
         m_timeline->setFrameCount(m_document->frameCount());
         m_timeline->setCurrentFrame(newIdx);
     }
+    if (ImGui::IsItemHovered()) ImGui::SetTooltip("Add frame");
 
     ImGui::EndChild();
 }

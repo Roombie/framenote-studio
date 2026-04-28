@@ -123,6 +123,14 @@ void CanvasPanel::render() {
             m_timeline->nextFrame();
         if (ImGui::IsKeyPressed(ImGuiKey_LeftArrow, false))
             m_timeline->prevFrame();
+        // Shift+Left/Right jump to first/last frame
+        if (io.KeyShift && ImGui::IsKeyPressed(ImGuiKey_LeftArrow, false))
+            m_timeline->setCurrentFrame(0);
+        if (io.KeyShift && ImGui::IsKeyPressed(ImGuiKey_RightArrow, false))
+            m_timeline->setCurrentFrame(m_timeline->frameCount() - 1);
+        // Space toggles play/pause
+        if (ImGui::IsKeyPressed(ImGuiKey_Space, false))
+            m_timeline->isPlaying() ? m_timeline->pause() : m_timeline->play();
     }
 
     // ── Zoom with + / - keys ─────────────────────────────────────────────────
@@ -234,16 +242,11 @@ void CanvasPanel::render() {
     if (spaceHeld && inWindow)
         ImGui::SetMouseCursor(ImGuiMouseCursor_ResizeAll);
 
-     // Bottom-left overlay: zoom level + canvas coordinates
-    std::string overlay = std::to_string((int)(m_zoom * 100)) + "%";
-    
-    int px = (int)((mp.x - originX) / canvasW * cw);
-    int py = (int)((mp.y - originY) / canvasH * ch);
-    overlay += "   X: " + std::to_string(px) + "  Y: " + std::to_string(py);
-
+    // Zoom level display
     dl->AddText({panelPos.x + 4, panelPos.y + panelSize.y - 20},
-                IM_COL32(150,150,150,200), overlay.c_str());
- 
+                IM_COL32(150,150,150,200),
+                (std::to_string((int)(m_zoom * 100)) + "%").c_str());
+
     ImGui::End();
 }
 

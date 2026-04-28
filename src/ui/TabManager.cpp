@@ -502,7 +502,8 @@ void TabManager::renderDocumentTab(DocumentTab& tab, ToolManager& toolManager) {
     // persists when switching between tabs.
     ToolsPanel(&toolManager, m_icons).render();
     PalettePanel(tab.document.get()).render();
-    TimelinePanel(tab.document.get(), tab.timeline.get()).render();
+    TimelinePanel(tab.document.get(), tab.timeline.get(), m_icons).render();
+
     CanvasPanel(
         tab.document.get(),
         tab.timeline.get(),

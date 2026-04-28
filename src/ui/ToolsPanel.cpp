@@ -1,4 +1,5 @@
 #include "ui/ToolsPanel.h"
+#include "ui/Theme.h"
 #include <imgui.h>
 
 namespace Framenote {
@@ -24,6 +25,11 @@ void ToolsPanel::render() {
         { ToolType::Eyedropper, m_icons ? m_icons->eyedropper : nullptr, "I", "Eyedropper (I)" },
     };
 
+    // Tint white icons dark when using the light theme
+    ImVec4 tint = (Theme::current() == ThemeMode::Light)
+        ? ImVec4(0.15f, 0.15f, 0.15f, 1.0f)
+        : ImVec4(1.0f,  1.0f,  1.0f,  1.0f);
+
     for (auto& btn : buttons) {
         bool active = (m_toolManager->activeToolType() == btn.type);
 
@@ -34,12 +40,11 @@ void ToolsPanel::render() {
         ImVec2 btnSize = {36, 36};
 
         if (btn.icon) {
-            // Use the pixel art icon as the button image
             ImTextureID tid = (ImTextureID)(intptr_t)btn.icon;
-            if (ImGui::ImageButton(btn.fallback, tid, btnSize))
+            if (ImGui::ImageButton(btn.fallback, tid, btnSize,
+                    {0,0}, {1,1}, {0,0,0,0}, tint))
                 m_toolManager->selectTool(btn.type);
         } else {
-            // Fallback text button if icon failed to load
             if (ImGui::Button(btn.fallback, btnSize))
                 m_toolManager->selectTool(btn.type);
         }

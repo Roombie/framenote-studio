@@ -6,7 +6,7 @@ namespace Framenote {
 
 class ToolsPanel {
 public:
-    ToolsPanel(ToolManager* toolManager, ToolIcons* icons)
+    ToolsPanel(ToolManager* toolManager, ToolIcons* icons = nullptr)
         : m_toolManager(toolManager), m_icons(icons) {}
 
     void render();
