@@ -1,3 +1,0 @@
-C:/framenote-studio/build/CMakeFiles/FramenoteStudio.dir
-C:/framenote-studio/build/CMakeFiles/ALL_BUILD.dir
-C:/framenote-studio/build/CMakeFiles/ZERO_CHECK.dir
