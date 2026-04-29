@@ -1,4 +1,5 @@
 #include "ui/CanvasPanel.h"
+#include "core/Palette.h"
 #include <imgui.h>
 #include <string>
 #include <SDL3/SDL.h>
@@ -91,6 +92,49 @@ void CanvasPanel::render() {
     bool ctrlHeld  = io.KeyCtrl;
     bool popupOpen = ImGui::IsPopupOpen("", ImGuiPopupFlags_AnyPopupId);
 
+    // ── Brush cursor preview ──────────────────────────────────────────────────
+    if (inCanvas && !spaceHeld && !popupOpen) {
+        ToolType activeTool = m_toolManager->activeToolType();
+        bool showCursor = (activeTool == ToolType::Pencil ||
+                           activeTool == ToolType::Eraser);
+        if (showCursor) {
+            int   bsize = m_toolManager->brushSize();
+            int   half  = bsize / 2;
+
+            int   px = (int)((mp.x - originX) / m_zoom);
+            int   py = (int)((mp.y - originY) / m_zoom);
+
+            float rx0 = originX + (px - half)         * m_zoom;
+            float ry0 = originY + (py - half)         * m_zoom;
+            float rx1 = originX + (px - half + bsize) * m_zoom;
+            float ry1 = originY + (py - half + bsize) * m_zoom;
+
+            if (activeTool == ToolType::Pencil) {
+                Color c = m_document->palette().selectedColor();
+                if (c.a > 0) {
+                    dl->AddRectFilled({rx0, ry0}, {rx1, ry1},
+                        IM_COL32(c.r, c.g, c.b, 255));
+                }
+                // Transparent color — outline only, no fill
+            }
+            // Eraser — outline only, no fill
+
+            // Dark shadow outline for contrast
+            dl->AddRect({rx0 - 1, ry0 - 1}, {rx1 + 1, ry1 + 1},
+                        IM_COL32(0, 0, 0, 180), 0.f, 0, 1.5f);
+            // White inner outline
+            dl->AddRect({rx0, ry0}, {rx1, ry1},
+                        IM_COL32(255, 255, 255, 220), 0.f, 0, 1.0f);
+        }
+    }
+
+    // Hide OS cursor only when preview is actually showing
+    if (inCanvas && !spaceHeld && !popupOpen) {
+        ToolType ct = m_toolManager->activeToolType();
+        if (ct == ToolType::Pencil || ct == ToolType::Eraser)
+            ImGui::SetMouseCursor(ImGuiMouseCursor_None);
+    }
+
     bool imguiCapturing = false;
 
     // ── Keyboard shortcuts ────────────────────────────────────────────────────
@@ -103,15 +147,24 @@ void CanvasPanel::render() {
             m_toolManager->selectTool(ToolType::Fill);
         if (ImGui::IsKeyPressed(ImGuiKey_I, false))
             m_toolManager->selectTool(ToolType::Eyedropper);
+        // [ / ] — decrease / increase brush size (Aseprite standard)
+        if (ImGui::IsKeyPressed(ImGuiKey_LeftBracket, false))
+            m_toolManager->setBrushSize(m_toolManager->brushSize() - 1);
+        if (ImGui::IsKeyPressed(ImGuiKey_RightBracket, false))
+            m_toolManager->setBrushSize(m_toolManager->brushSize() + 1);
         if (ImGui::IsKeyPressed(ImGuiKey_RightArrow, false))
             m_timeline->nextFrame();
         if (ImGui::IsKeyPressed(ImGuiKey_LeftArrow, false))
             m_timeline->prevFrame();
         // Shift+Left/Right jump to first/last frame
-        if (io.KeyShift && ImGui::IsKeyPressed(ImGuiKey_LeftArrow, false))
-            m_timeline->setCurrentFrame(0);
-        if (io.KeyShift && ImGui::IsKeyPressed(ImGuiKey_RightArrow, false))
-            m_timeline->setCurrentFrame(m_timeline->frameCount() - 1);
+        if (io.KeyShift && ImGui::IsKeyPressed(ImGuiKey_LeftArrow, false)) {
+            if (m_timeline->isPlaying()) m_timeline->pause();
+                m_timeline->setCurrentFrame(0);
+        }
+        if (io.KeyShift && ImGui::IsKeyPressed(ImGuiKey_RightArrow, false)) {
+            if (m_timeline->isPlaying()) m_timeline->pause();
+                m_timeline->setCurrentFrame(m_timeline->frameCount() - 1);
+        }
         // Space toggles play/pause
         if (ImGui::IsKeyPressed(ImGuiKey_Space, false))
             m_timeline->isPlaying() ? m_timeline->pause() : m_timeline->play();
@@ -177,6 +230,7 @@ void CanvasPanel::render() {
         e.canvasY   = (float)py;
         e.leftDown  = io.MouseDown[0];
         e.rightDown = io.MouseDown[1];
+        e.brushSize = m_toolManager->brushSize();
 
         Tool* tool = m_toolManager->activeTool();
         if (tool) {

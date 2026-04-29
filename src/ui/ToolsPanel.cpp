@@ -5,8 +5,8 @@
 namespace Framenote {
 
 void ToolsPanel::render() {
-    ImGui::SetNextWindowSizeConstraints({50, 150}, {80, FLT_MAX});
-    ImGui::Begin("Tools", nullptr, ImGuiWindowFlags_NoScrollbar);
+    ImGui::Begin("Tools", nullptr,
+        ImGuiWindowFlags_NoScrollbar);
 
     struct ToolBtn {
         ToolType      type;
@@ -50,6 +50,23 @@ void ToolsPanel::render() {
 
         if (ImGui::IsItemHovered())
             ImGui::SetTooltip("%s", btn.tooltip);
+    }
+
+    // Only show brush size for tools that use it
+    ToolType active = m_toolManager->activeToolType();
+    bool showBrush  = (active == ToolType::Pencil || active == ToolType::Eraser);
+
+    if (showBrush) {
+        ImGui::Spacing();
+        ImGui::Separator();
+        ImGui::Spacing();
+
+        int bsize = m_toolManager->brushSize();
+        ImGui::SetNextItemWidth(ImGui::GetContentRegionAvail().x);
+        if (ImGui::SliderInt("##bsize", &bsize, 1, 32, "%d px"))
+            m_toolManager->setBrushSize(bsize);
+        if (ImGui::IsItemHovered())
+            ImGui::SetTooltip("Brush size  ( [ / ] )");
     }
 
     ImGui::End();

@@ -13,8 +13,10 @@ public:
     void onRelease(Document& doc, int frameIndex, const ToolEvent& e) override;
 
 private:
-    void erasePixel(Document& doc, int frameIndex, int x, int y);
-    void eraseLine (Document& doc, int frameIndex, int x0, int y0, int x1, int y1);
+    // Erase a square brush of e.brushSize centered on (x, y)
+    void eraseBrush(Document& doc, int frameIndex, int x, int y, int size);
+    void eraseLine (Document& doc, int frameIndex,
+                    int x0, int y0, int x1, int y1, int size);
 
     int  m_lastX = -1;
     int  m_lastY = -1;

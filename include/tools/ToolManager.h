@@ -11,6 +11,7 @@ struct ToolEvent {
     float canvasY;
     bool  leftDown;
     bool  rightDown;
+    int   brushSize = 1;  // pixels — square brush, centered on cursor
 };
 
 enum class ToolType {
@@ -43,9 +44,13 @@ public:
     Tool*      activeTool();
     ToolType   activeToolType() const { return m_activeType; }
 
+    int  brushSize() const          { return m_brushSize; }
+    void setBrushSize(int size)     { m_brushSize = size < 1 ? 1 : (size > 64 ? 64 : size); }
+
 private:
     std::unordered_map<ToolType, std::unique_ptr<Tool>> m_tools;
     ToolType m_activeType = ToolType::Pencil;
+    int      m_brushSize  = 1;
 };
 
 } // namespace Framenote
