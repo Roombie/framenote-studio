@@ -9,7 +9,10 @@ void FillTool::onPress(Document& doc, int frameIndex, const ToolEvent& e) {
     int y = static_cast<int>(e.canvasY);
 
     uint32_t targetColor = frame.getPixel(x, y);
-    uint32_t fillColor   = doc.palette().selectedColor().toRGBA();
+    uint32_t fillColor =
+        (e.rightDown && !e.leftDown)
+            ? doc.palette().secondaryColor().toRGBA()
+            : doc.palette().primaryColor().toRGBA();
 
     if (targetColor == fillColor) return; // nothing to do
 

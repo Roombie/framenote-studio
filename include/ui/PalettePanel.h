@@ -4,18 +4,22 @@
 
 namespace Framenote {
 
-// Right sidebar: 32-color swatch grid + selected color preview.
 class PalettePanel {
 public:
-    explicit PalettePanel(Document* document);
+    PalettePanel(Document* document, bool& editingSecondary);
 
     void render();
 
 private:
+    void renderColorSlots(Palette& palette);
+    void renderSwatchGrid(Palette& palette);
+    void renderColorChooser(Palette& palette);
+    void renderToolbar(Palette& palette);
+
     Document* m_document;
+    bool&     m_editingSecondary;
 
     static constexpr float SWATCH_SIZE = 20.0f;
-    static constexpr int   SWATCHES_PER_ROW = 4;
 };
 
 } // namespace Framenote

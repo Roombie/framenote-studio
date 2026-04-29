@@ -68,11 +68,11 @@ void TimelinePanel::renderPlaybackControls() {
     // Play / Pause toggle
     if (playing) {
         if (iconButton("##pause", m_icons ? m_icons->pause : nullptr,
-                       "||", btnSize, "Pause  (Space)"))
+                       "||", btnSize, "Pause  (Enter)"))
             m_timeline->pause();
     } else {
         if (iconButton("##play", m_icons ? m_icons->play : nullptr,
-                       ">", btnSize, "Play  (Space)"))
+                       ">", btnSize, "Play  (Enter)"))
             m_timeline->play();
     }
 
@@ -104,9 +104,10 @@ void TimelinePanel::renderPlaybackControls() {
     // FPS slider
     ImGui::SetNextItemWidth(90.0f);
     int fps = m_timeline->fps();
-    if (ImGui::SliderInt("FPS", &fps, 1, 60))
+    if (ImGui::SliderInt("FPS", &fps, 1, 60)) {
         m_timeline->setFps(fps);
-
+        m_document->setFps(m_timeline->fps());
+    }
     ImGui::SameLine();
 
     // Onion skin
@@ -152,8 +153,11 @@ void TimelinePanel::renderFrameStrip() {
             ImGui::PopStyleColor(2);
 
         if (ImGui::BeginPopupContextItem("##FrameCtx")) {
-            if (ImGui::MenuItem("Duplicate"))
+            if (ImGui::MenuItem("Duplicate")) {
                 m_document->duplicateFrame(i);
+                m_timeline->setFrameCount(m_document->frameCount());
+                m_timeline->setCurrentFrame(i + 1);
+            }
             if (ImGui::MenuItem("Delete") && frameCount > 1) {
                 m_document->deleteFrame(i);
                 m_timeline->setFrameCount(m_document->frameCount());

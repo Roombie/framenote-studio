@@ -192,7 +192,7 @@ FramenoteStudio_IS_TOP_LEVEL:STATIC=ON
 FramenoteStudio_SOURCE_DIR:STATIC=C:/framenote-studio
 
 //No help, variable specified on the command line.
-SDL3_DIR:UNINITIALIZED=C:/SDL3-3.4.4/cmake
+SDL3_DIR:UNINITIALIZED=C:\SDL3-3.4.4\cmake
 
 //Detected architecture ARM32
 SDL_CPU_ARM32:BOOL=0

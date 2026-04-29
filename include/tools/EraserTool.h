@@ -1,4 +1,5 @@
 #pragma once
+
 #include "tools/ToolManager.h"
 
 namespace Framenote {

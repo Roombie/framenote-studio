@@ -18,7 +18,7 @@ void EyedropperTool::onPress(Document& doc, int frameIndex, const ToolEvent& e) 
 
     int bestIdx = 1;
     int bestDist = INT_MAX;
-    for (int i = 1; i < Palette::size(); ++i) {
+    for (int i = 1; i < doc.palette().size(); ++i) {
         const Color& c = doc.palette().color(i);
         int dr = c.r - r;
         int dg = c.g - g;
@@ -29,7 +29,10 @@ void EyedropperTool::onPress(Document& doc, int frameIndex, const ToolEvent& e) 
             bestIdx = i;
         }
     }
-    doc.palette().selectIndex(bestIdx);
+    if (e.rightDown && !e.leftDown)
+        doc.palette().selectSecondaryIndex(bestIdx);
+    else
+        doc.palette().selectPrimaryIndex(bestIdx);
 }
 
 } // namespace Framenote

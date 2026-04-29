@@ -84,10 +84,21 @@ void CanvasPanel::render() {
     ImVec2 winSize = {ImGui::GetWindowWidth(), ImGui::GetWindowHeight()};
     ImVec2 mp      = io.MousePos;
 
-    bool inWindow  = mp.x >= winPos.x && mp.x < winPos.x + winSize.x &&
-                     mp.y >= winPos.y && mp.y < winPos.y + winSize.y;
-    bool inCanvas  = mp.x >= originX && mp.x < originX + canvasW &&
-                     mp.y >= originY && mp.y < originY + canvasH;
+    bool canvasWindowHovered =
+    ImGui::IsWindowHovered(ImGuiHoveredFlags_AllowWhenBlockedByActiveItem);
+
+    bool rawInWindow = mp.x >= winPos.x && mp.x < winPos.x + winSize.x &&
+                    mp.y >= winPos.y && mp.y < winPos.y + winSize.y;
+
+    bool rawInCanvas = mp.x >= originX && mp.x < originX + canvasW &&
+                    mp.y >= originY && mp.y < originY + canvasH;
+
+    // Only let the Canvas panel control input/cursor when the Canvas window is
+    // actually the hovered window. This prevents it from affecting Timeline,
+    // Palette, Tools, popups, or other docked panels.
+    bool inWindow = canvasWindowHovered && rawInWindow;
+    bool inCanvas = canvasWindowHovered && rawInCanvas;
+
     bool spaceHeld = ImGui::IsKeyDown(ImGuiKey_Space);
     bool ctrlHeld  = io.KeyCtrl;
     bool popupOpen = ImGui::IsPopupOpen("", ImGuiPopupFlags_AnyPopupId);
@@ -128,11 +139,34 @@ void CanvasPanel::render() {
         }
     }
 
-    // Hide OS cursor only when preview is actually showing
-    if (inCanvas && !spaceHeld && !popupOpen) {
+    // Cursor behavior:
+    // - Arrow cursor while hovering/navigating.
+    // - Hidden cursor only while actively drawing with pencil/eraser.
+    // - ResizeAll cursor while panning with Space.
+    // - This avoids losing the cursor when moving to Timeline, Palette, or Tools.
+    {
         ToolType ct = m_toolManager->activeToolType();
-        if (ct == ToolType::Pencil || ct == ToolType::Eraser)
+
+        bool brushTool =
+            ct == ToolType::Pencil ||
+            ct == ToolType::Eraser;
+
+        bool activelyDrawing =
+            inCanvas &&
+            brushTool &&
+            !spaceHeld &&
+            !popupOpen &&
+            (io.MouseDown[0] || io.MouseDown[1]);
+
+        if (spaceHeld && inWindow) {
+            ImGui::SetMouseCursor(ImGuiMouseCursor_ResizeAll);
+        }
+        else if (activelyDrawing) {
             ImGui::SetMouseCursor(ImGuiMouseCursor_None);
+        }
+        else if (canvasWindowHovered) {
+            ImGui::SetMouseCursor(ImGuiMouseCursor_Arrow);
+        }
     }
 
     bool imguiCapturing = false;
@@ -165,8 +199,9 @@ void CanvasPanel::render() {
             if (m_timeline->isPlaying()) m_timeline->pause();
                 m_timeline->setCurrentFrame(m_timeline->frameCount() - 1);
         }
-        // Space toggles play/pause
-        if (ImGui::IsKeyPressed(ImGuiKey_Space, false))
+        // Enter toggles play/pause. Space is reserved for Space+drag panning.
+        if (ImGui::IsKeyPressed(ImGuiKey_Enter, false) ||
+            ImGui::IsKeyPressed(ImGuiKey_KeypadEnter, false))
             m_timeline->isPlaying() ? m_timeline->pause() : m_timeline->play();
     }
 
@@ -210,9 +245,30 @@ void CanvasPanel::render() {
         io.MouseWheel = 0.f;
     }
 
+    // ── Mouse state for drawing / panning ─────────────────────────────────────
+    bool drawingMouseDown =
+        io.MouseDown[0] ||
+        io.MouseDown[1];
+
+    bool drawingMouseClicked =
+        io.MouseClicked[0] ||
+        io.MouseClicked[1];
+
+    bool drawingMouseReleased =
+        io.MouseReleased[0] ||
+        io.MouseReleased[1];
+
     // ── Pan ───────────────────────────────────────────────────────────────────
-    bool isPanning = io.MouseDown[2] || (spaceHeld && io.MouseDown[0]);
-    bool isDrawing = inCanvas && !spaceHeld && !io.MouseDown[2] && io.MouseDown[0];
+    bool isPanning =
+        io.MouseDown[2] ||
+        (spaceHeld && io.MouseDown[0]);
+
+    bool isDrawing =
+        inCanvas &&
+        !spaceHeld &&
+        !io.MouseDown[2] &&
+        drawingMouseDown;
+
     if (inWindow && isPanning && !isDrawing && !popupOpen && !imguiCapturing) {
         m_panX += io.MouseDelta.x;
         m_panY += io.MouseDelta.y;
@@ -222,42 +278,47 @@ void CanvasPanel::render() {
     if (inCanvas && !spaceHeld && !io.MouseDown[2] && !popupOpen && !imguiCapturing) {
         float relX = (mp.x - originX) / canvasW;
         float relY = (mp.y - originY) / canvasH;
-        int px = (int)(relX * cw);
-        int py = (int)(relY * ch);
+
+        int px = static_cast<int>(relX * cw);
+        int py = static_cast<int>(relY * ch);
 
         ToolEvent e;
-        e.canvasX   = (float)px;
-        e.canvasY   = (float)py;
+        e.canvasX   = static_cast<float>(px);
+        e.canvasY   = static_cast<float>(py);
         e.leftDown  = io.MouseDown[0];
         e.rightDown = io.MouseDown[1];
         e.brushSize = m_toolManager->brushSize();
 
         Tool* tool = m_toolManager->activeTool();
+
         if (tool) {
             int fi = m_timeline->currentFrame();
-            if (io.MouseClicked[0]) {
+
+            if (drawingMouseClicked) {
                 // Snapshot current frame state before drawing for undo
                 {
                     auto& f = m_document->frame(fi);
+
                     Snapshot snap;
                     snap.frameIndex   = fi;
                     snap.bufferWidth  = f.bufferWidth();
                     snap.bufferHeight = f.bufferHeight();
                     snap.pixels       = f.pixels();
+
                     m_history.push(std::move(snap));
                 }
+
                 tool->onPress(*m_document, fi, e);
-            } else if (io.MouseDown[0]) {
+            }
+            else if (drawingMouseDown) {
                 tool->onDrag(*m_document, fi, e);
             }
-            if (io.MouseReleased[0])
+
+            if (drawingMouseReleased) {
                 tool->onRelease(*m_document, fi, e);
+            }
         }
     }
-
-    // Cursor hint
-    if (spaceHeld && inWindow)
-        ImGui::SetMouseCursor(ImGuiMouseCursor_ResizeAll);
 
     // Zoom level display
     dl->AddText({panelPos.x + 4, panelPos.y + panelSize.y - 20},

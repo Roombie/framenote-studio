@@ -1,6 +1,7 @@
 ﻿#pragma once
 
-#include <array>
+#include <vector>
+#include <string>
 #include <cstdint>
 
 namespace Framenote {
@@ -25,34 +26,50 @@ struct Color {
         };
     }
 
-    // Transparent sentinel
     static Color transparent() { return {0, 0, 0, 0}; }
 };
 
-constexpr int PALETTE_SIZE = 32;
-
-// Fixed 32-color palette â€” Flipnote-inspired simplicity for v0.1
 class Palette {
 public:
-    Palette();  // Initializes with a default pixel-art friendly palette
+    Palette();
 
+    // Color access
     Color&       color(int index)       { return m_colors[index]; }
     const Color& color(int index) const { return m_colors[index]; }
+    int          size()           const { return (int)m_colors.size(); }
 
-    int  selectedIndex() const       { return m_selectedIndex; }
-    void selectIndex(int index)      { m_selectedIndex = index; }
-    Color selectedColor() const      { return m_colors[m_selectedIndex]; }
+    // Selection
+    int   selectedIndex() const  { return m_selectedIndex; }
+    void  selectIndex(int index) { m_selectedIndex = clamp(index); }
+    Color selectedColor() const  { return m_colors[m_selectedIndex]; }
 
-    static constexpr int size() { return PALETTE_SIZE; }
+    // Primary / secondary colors.
+    // selectedIndex() remains as primary color for backward compatibility.
+    int   primaryIndex() const { return m_selectedIndex; }
+    int   secondaryIndex() const { return clamp(m_secondaryIndex); }
 
-    void loadDefault();   // Reset to built-in palette
+    void  selectPrimaryIndex(int index) { selectIndex(index); }
+    void  selectSecondaryIndex(int index) { m_secondaryIndex = clamp(index); }
+
+    Color primaryColor() const { return selectedColor(); }
+    Color secondaryColor() const { return m_colors[clamp(m_secondaryIndex)]; }
+
+    // Add / remove / reorder colors
+    void addColor(Color c = {0, 0, 0, 255});
+    void removeColor(int index);   // clamps selection if needed
+    void moveColor(int fromIndex, int toIndex);
+
+    // Persistence
+    void loadDefault();
+    bool save(const std::string& path) const;
+    bool load(const std::string& path);
 
 private:
-    std::array<Color, PALETTE_SIZE> m_colors;
-    int                             m_selectedIndex = 1; // default: black
+    int clamp(int index) const;
+
+    std::vector<Color> m_colors;
+    int                m_selectedIndex = 1; // Primary color
+    int                m_secondaryIndex = 0; // Secondary color, usually transparent
 };
 
 } // namespace Framenote
-
-
-

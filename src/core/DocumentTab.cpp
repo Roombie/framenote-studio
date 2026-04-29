@@ -10,6 +10,7 @@ std::unique_ptr<DocumentTab> DocumentTab::createBlank(
     auto tab = std::make_unique<DocumentTab>();
     tab->name     = name;
     tab->document = std::make_unique<Document>(w, h);
+    tab->document->setFps(fps);
     tab->document->addFrame();
     tab->timeline = std::make_unique<Timeline>();
     tab->timeline->setFrameCount(1);

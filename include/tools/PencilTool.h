@@ -1,5 +1,7 @@
 #pragma once
+
 #include "tools/ToolManager.h"
+#include <cstdint>
 
 namespace Framenote {
 
@@ -18,9 +20,10 @@ private:
     void drawLine (Document& doc, int frameIndex,
                    int x0, int y0, int x1, int y1, int size);
 
-    int  m_lastX    = -1;
-    int  m_lastY    = -1;
-    bool m_drawing  = false;
+    int      m_lastX = -1;
+    int      m_lastY = -1;
+    bool     m_drawing = false;
+    uint32_t m_drawColor = 0xFF000000;
 };
 
 } // namespace Framenote

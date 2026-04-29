@@ -23,6 +23,9 @@ struct DocumentTab {
     float canvasPanX = 0.0f;
     float canvasPanY = 0.0f;
 
+    // Palette UI state — persisted across frames
+    bool paletteEditingSecondary = false;
+
     static std::unique_ptr<DocumentTab> createBlank(
         SDL_Renderer* sdlRenderer,
         const std::string& name = "untitled",

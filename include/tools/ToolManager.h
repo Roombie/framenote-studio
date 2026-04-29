@@ -31,9 +31,9 @@ public:
 
     // Called on mouse press, drag, and release over the canvas.
     // Implementations should call doc.markDirty() after modifying pixels.
-    virtual void onPress  (Document& doc, int frameIndex, const ToolEvent& e) {}
-    virtual void onDrag   (Document& doc, int frameIndex, const ToolEvent& e) {}
-    virtual void onRelease(Document& doc, int frameIndex, const ToolEvent& e) {}
+    virtual void onPress  (Document&, int, const ToolEvent&) {}
+    virtual void onDrag   (Document&, int, const ToolEvent&) {}
+    virtual void onRelease(Document&, int, const ToolEvent&) {}
 };
 
 class ToolManager {

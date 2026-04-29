@@ -480,8 +480,12 @@ void MainWindow::renderCanvasSizeDialog() {
                 }
                 tab->history->pushResize(std::move(frameSnaps), oldW, oldH);
 
-                for (int i = 0; i < tab->document->frameCount(); ++i)
-                    tab->document->frame(i).expandBuffer(m_newCanvasW, m_newCanvasH);
+                for (int i = 0; i < tab->document->frameCount(); ++i) {
+                    auto& frame = tab->document->frame(i);
+                    frame.expandBuffer(m_newCanvasW, m_newCanvasH);
+                    frame.setVisibleSize(m_newCanvasW, m_newCanvasH);
+                }
+
                 tab->document->setCanvasSize(m_newCanvasW, m_newCanvasH);
                 tab->renderer->resize(m_newCanvasW, m_newCanvasH);
                 tab->document->markDirty();

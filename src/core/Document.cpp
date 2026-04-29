@@ -21,6 +21,14 @@ const Frame& Document::frame(int index) const {
     return *m_frames[index];
 }
 
+void Document::setFps(int fps) {
+    int clamped = fps < 1 ? 1 : (fps > 60 ? 60 : fps);
+    if (m_fps == clamped) return;
+
+    m_fps = clamped;
+    m_dirty = true;
+}
+
 int Document::addFrame() {
     m_frames.push_back(std::make_unique<Frame>(m_canvasSize.width, m_canvasSize.height));
     m_dirty = true;

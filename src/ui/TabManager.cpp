@@ -408,7 +408,7 @@ void TabManager::renderDocumentTab(DocumentTab& tab, ToolManager& toolManager) {
 
     // Render each panel — they are now dockable windows
     ToolsPanel(&toolManager, m_icons).render();
-    PalettePanel(tab.document.get()).render();
+    PalettePanel(tab.document.get(), tab.paletteEditingSecondary).render();
     TimelinePanel(tab.document.get(), tab.timeline.get(), m_icons).render();
 
     CanvasPanel(

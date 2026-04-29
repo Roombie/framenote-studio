@@ -31,7 +31,7 @@ public:
 
     // ── Playback metadata ─────────────────────────────────────────────────────
     int  fps()         const { return m_fps; }
-    void setFps(int fps)     { m_fps = fps; }
+    void setFps(int fps);
 
     // ── Canvas size ───────────────────────────────────────────────────────────
     CanvasSize canvasSize() const { return m_canvasSize; }
