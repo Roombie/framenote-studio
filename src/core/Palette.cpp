@@ -1,6 +1,9 @@
 #include "core/Palette.h"
+
+#include <algorithm>
 #include <fstream>
 #include <sstream>
+#include <utility>
 
 namespace Framenote {
 
@@ -50,6 +53,17 @@ void Palette::moveColor(int fromIndex, int toIndex) {
 void Palette::removeColor(int index) {
     if (m_colors.size() <= 1) return;  // always keep at least one
     m_colors.erase(m_colors.begin() + index);
+    m_selectedIndex = clamp(m_selectedIndex);
+    m_secondaryIndex = clamp(m_secondaryIndex);
+}
+
+void Palette::setColors(std::vector<Color> colors) {
+    if (colors.empty()) {
+        colors.push_back({0, 0, 0, 0});
+    }
+
+    m_colors = std::move(colors);
+
     m_selectedIndex = clamp(m_selectedIndex);
     m_secondaryIndex = clamp(m_secondaryIndex);
 }

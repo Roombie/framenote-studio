@@ -1,5 +1,6 @@
 #include "io/FileManager.h"
 #include "core/Frame.h"
+
 #include <nlohmann/json.hpp>
 
 #define STB_IMAGE_WRITE_IMPLEMENTATION
@@ -8,12 +9,13 @@
 #define STB_IMAGE_IMPLEMENTATION
 #include <stb_image.h>
 
-#include <fstream>
-#include <sstream>
-#include <vector>
-
 #include <algorithm>
 #include <cstdio>
+#include <fstream>
+#include <sstream>
+#include <string>
+#include <utility>
+#include <vector>
 
 using json = nlohmann::json;
 
@@ -55,7 +57,8 @@ static std::vector<uint8_t> frameToVisibleRGBA(const Frame& frame) {
 }
 
 static std::vector<uint8_t> rgbaToInternalBGRA(const uint8_t* rgba,
-                                               int w, int h) {
+                                               int w,
+                                               int h) {
     std::vector<uint8_t> bgra(static_cast<size_t>(w * h * 4), 0);
 
     for (int i = 0; i < w * h; ++i) {
@@ -74,6 +77,7 @@ static std::vector<uint8_t> encodePNG(const Frame& frame) {
     auto writeFunc = [](void* ctx, void* data, int size) {
         auto* buf = static_cast<std::vector<uint8_t>*>(ctx);
         auto* bytes = static_cast<uint8_t*>(data);
+
         buf->insert(buf->end(), bytes, bytes + size);
     };
 
@@ -121,50 +125,105 @@ static bool decodePNG(const std::vector<uint8_t>& pngData, Frame& outFrame) {
     return true;
 }
 
-// ── Base64 encode/decode (no external dep needed) ─────────────────────────────
+// ── Base64 encode/decode ─────────────────────────────────────────────────────
 
 static const char B64_CHARS[] =
     "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
 
 static std::string base64Encode(const std::vector<uint8_t>& in) {
     std::string out;
-    int val = 0, valb = -6;
+
+    int val = 0;
+    int valb = -6;
+
     for (uint8_t c : in) {
         val = (val << 8) + c;
         valb += 8;
+
         while (valb >= 0) {
             out += B64_CHARS[(val >> valb) & 0x3F];
             valb -= 6;
         }
     }
-    if (valb > -6) out += B64_CHARS[((val << 8) >> (valb + 8)) & 0x3F];
-    while (out.size() % 4) out += '=';
+
+    if (valb > -6) {
+        out += B64_CHARS[((val << 8) >> (valb + 8)) & 0x3F];
+    }
+
+    while (out.size() % 4) {
+        out += '=';
+    }
+
     return out;
 }
 
 static std::vector<uint8_t> base64Decode(const std::string& in) {
-    std::vector<int> T(256, -1);
-    for (int i = 0; i < 64; i++) T[(uint8_t)B64_CHARS[i]] = i;
+    std::vector<int> table(256, -1);
+
+    for (int i = 0; i < 64; ++i) {
+        table[static_cast<uint8_t>(B64_CHARS[i])] = i;
+    }
 
     std::vector<uint8_t> out;
-    int val = 0, valb = -8;
+
+    int val = 0;
+    int valb = -8;
+
     for (uint8_t c : in) {
-        if (T[c] == -1) break;
-        val = (val << 6) + T[c];
+        if (table[c] == -1)
+            break;
+
+        val = (val << 6) + table[c];
         valb += 6;
+
         if (valb >= 0) {
-            out.push_back((val >> valb) & 0xFF);
+            out.push_back(static_cast<uint8_t>((val >> valb) & 0xFF));
             valb -= 8;
         }
     }
+
     return out;
+}
+
+// ── JSON helpers ──────────────────────────────────────────────────────────────
+
+static bool readInt(const json& obj, const char* key, int& out) {
+    if (!obj.contains(key))
+        return false;
+
+    if (!obj[key].is_number_integer())
+        return false;
+
+    out = obj[key].get<int>();
+    return true;
+}
+
+static bool readHexColor(const std::string& hex, Color& outColor) {
+    Color c {0, 0, 0, 255};
+
+    int result = std::sscanf(
+        hex.c_str(),
+        "#%02hhX%02hhX%02hhX%02hhX",
+        &c.r,
+        &c.g,
+        &c.b,
+        &c.a
+    );
+
+    if (result != 4)
+        return false;
+
+    outColor = c;
+    return true;
 }
 
 // ── Public API ────────────────────────────────────────────────────────────────
 
-bool FileManager::save(const Document& doc, const std::string& path,
+bool FileManager::save(const Document& doc,
+                       const std::string& path,
                        std::string& outError) {
     json j;
+
     j["version"]          = FORMAT_VERSION;
     j["canvas"]["width"]  = doc.canvasSize().width;
     j["canvas"]["height"] = doc.canvasSize().height;
@@ -172,77 +231,210 @@ bool FileManager::save(const Document& doc, const std::string& path,
 
     // Palette
     json palette = json::array();
+
     for (int i = 0; i < doc.palette().size(); ++i) {
-        auto c = doc.palette().color(i);
+        Color c = doc.palette().color(i);
+
         char hex[10];
-        snprintf(hex, sizeof(hex), "#%02X%02X%02X%02X", c.r, c.g, c.b, c.a);
+
+        std::snprintf(
+            hex,
+            sizeof(hex),
+            "#%02X%02X%02X%02X",
+            c.r,
+            c.g,
+            c.b,
+            c.a
+        );
+
         palette.push_back(std::string(hex));
     }
+
     j["palette"] = palette;
 
     // Frames — each encoded as base64 PNG
     json frames = json::array();
+
     for (int i = 0; i < doc.frameCount(); ++i) {
         auto png = encodePNG(doc.frame(i));
-        frames.push_back({ {"pixels", base64Encode(png)} });
+
+        frames.push_back({
+            {"pixels", base64Encode(png)}
+        });
     }
+
     j["frames"] = frames;
 
-    std::ofstream file(path);
+    std::ofstream file(path, std::ios::binary);
+
     if (!file.is_open()) {
         outError = "Cannot open file for writing: " + path;
         return false;
     }
+
     file << j.dump(2);
+
+    if (!file.good()) {
+        outError = "Failed while writing file: " + path;
+        return false;
+    }
+
     return true;
 }
 
 std::unique_ptr<Document> FileManager::load(const std::string& path,
-                                             std::string& outError) {
-    std::ifstream file(path);
+                                            std::string& outError) {
+    std::ifstream file(path, std::ios::binary);
+
     if (!file.is_open()) {
         outError = "Cannot open file: " + path;
         return nullptr;
     }
 
     json j;
-    try { j = json::parse(file); }
+
+    try {
+        j = json::parse(file);
+    }
     catch (const json::exception& e) {
         outError = std::string("JSON parse error: ") + e.what();
         return nullptr;
     }
 
-    int w = j["canvas"]["width"];
-    int h = j["canvas"]["height"];
-    auto doc = std::make_unique<Document>(w, h);
-    doc->setFps(j["fps"].get<int>());
-
-    // Palette
-    auto& palette = j["palette"];
-    for (int i = 0; i < std::min((int)palette.size(), doc->palette().size()); ++i) {
-        std::string hex = palette[i];
-        Color c;
-        sscanf(hex.c_str(), "#%02hhX%02hhX%02hhX%02hhX", &c.r, &c.g, &c.b, &c.a);
-        doc->palette().color(i) = c;
-    }
-
-    // Frames
-    for (auto& fj : j["frames"]) {
-        int idx = doc->addFrame();
-
-        auto pngData = base64Decode(fj["pixels"].get<std::string>());
-
-        if (!decodePNG(pngData, doc->frame(idx))) {
-            outError = "Failed to decode frame PNG data";
+    try {
+        if (!j.is_object()) {
+            outError = "Invalid .framenote file: root must be a JSON object";
             return nullptr;
         }
 
-        doc->frame(idx).setVisibleSize(w, h);
-    }
+        // Version validation. Missing version is treated as version 1 for older files.
+        int fileVersion = 1;
 
-    doc->setFilePath(path);
-    doc->clearDirty();
-    return doc;
+        if (j.contains("version")) {
+            if (!j["version"].is_number_integer()) {
+                outError = "Invalid .framenote file: version must be an integer";
+                return nullptr;
+            }
+
+            fileVersion = j["version"].get<int>();
+        }
+
+        if (fileVersion < 1 || fileVersion > FORMAT_VERSION) {
+            outError = "Unsupported .framenote format version";
+            return nullptr;
+        }
+
+        // Canvas validation
+        if (!j.contains("canvas") || !j["canvas"].is_object()) {
+            outError = "Invalid .framenote file: missing canvas data";
+            return nullptr;
+        }
+
+        int w = 0;
+        int h = 0;
+
+        if (!readInt(j["canvas"], "width", w) ||
+            !readInt(j["canvas"], "height", h)) {
+            outError = "Invalid .framenote file: canvas width/height must be integers";
+            return nullptr;
+        }
+
+        if (w <= 0 || h <= 0 || w > 8192 || h > 8192) {
+            outError = "Invalid .framenote file: canvas size is out of range";
+            return nullptr;
+        }
+
+        auto doc = std::make_unique<Document>(w, h);
+
+        // FPS validation
+        if (j.contains("fps")) {
+            if (!j["fps"].is_number_integer()) {
+                outError = "Invalid .framenote file: fps must be an integer";
+                return nullptr;
+            }
+
+            doc->setFps(j["fps"].get<int>());
+        }
+
+        // Palette
+        if (j.contains("palette")) {
+            if (!j["palette"].is_array()) {
+                outError = "Invalid .framenote file: palette must be an array";
+                return nullptr;
+            }
+
+            std::vector<Color> loadedColors;
+
+            for (const auto& item : j["palette"]) {
+                if (!item.is_string())
+                    continue;
+
+                Color c;
+
+                if (readHexColor(item.get<std::string>(), c)) {
+                    loadedColors.push_back(c);
+                }
+            }
+
+            if (!loadedColors.empty()) {
+                doc->palette().setColors(std::move(loadedColors));
+            }
+        }
+
+        // Frames
+        if (!j.contains("frames") || !j["frames"].is_array()) {
+            outError = "Invalid .framenote file: frames must be an array";
+            return nullptr;
+        }
+
+        for (const auto& fj : j["frames"]) {
+            if (!fj.is_object() ||
+                !fj.contains("pixels") ||
+                !fj["pixels"].is_string()) {
+                outError = "Invalid .framenote file: frame is missing pixel data";
+                return nullptr;
+            }
+
+            int idx = doc->addFrame();
+
+            auto pngData = base64Decode(fj["pixels"].get<std::string>());
+
+            if (pngData.empty()) {
+                outError = "Invalid .framenote file: empty frame PNG data";
+                return nullptr;
+            }
+
+            Frame& loadedFrame = doc->frame(idx);
+
+            if (!decodePNG(pngData, loadedFrame)) {
+                outError = "Failed to decode frame PNG data";
+                return nullptr;
+            }
+
+            // The document canvas size is authoritative.
+            // If the decoded PNG buffer is smaller, expand it so drawing still works.
+            loadedFrame.expandBuffer(w, h);
+            loadedFrame.setVisibleSize(w, h);
+        }
+
+        // Always guarantee at least one frame.
+        if (doc->frameCount() == 0) {
+            doc->addFrame();
+        }
+
+        doc->setFilePath(path);
+        doc->clearDirty();
+
+        return doc;
+    }
+    catch (const json::exception& e) {
+        outError = std::string("Invalid .framenote file: ") + e.what();
+        return nullptr;
+    }
+    catch (const std::exception& e) {
+        outError = std::string("Failed to load .framenote file: ") + e.what();
+        return nullptr;
+    }
 }
 
 } // namespace Framenote

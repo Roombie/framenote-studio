@@ -54,10 +54,11 @@ public:
     Color primaryColor() const { return selectedColor(); }
     Color secondaryColor() const { return m_colors[clamp(m_secondaryIndex)]; }
 
-    // Add / remove / reorder colors
+    // Add / remove / reorder / set colors
     void addColor(Color c = {0, 0, 0, 255});
     void removeColor(int index);   // clamps selection if needed
     void moveColor(int fromIndex, int toIndex);
+    void setColors(std::vector<Color> colors);
 
     // Persistence
     void loadDefault();

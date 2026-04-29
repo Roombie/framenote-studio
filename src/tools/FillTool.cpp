@@ -20,8 +20,8 @@ void FillTool::onPress(Document& doc, int frameIndex, const ToolEvent& e) {
     std::queue<std::pair<int,int>> queue;
     queue.push({x, y});
 
-    int w = frame.bufferWidth();
-    int h = frame.bufferHeight();
+    int w = frame.width();
+    int h = frame.height();
 
     while (!queue.empty()) {
         auto [cx, cy] = queue.front();
