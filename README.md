@@ -4,7 +4,7 @@
 
 Framenote Studio is a lightweight pixel animation editor inspired by Flipnote Studio and Aseprite. It focuses on quick frame-by-frame drawing, simple animation playback, onion skinning, palette-based pixel art, and export tools for small animations.
 
-Current version: **v0.1.0**
+Current version: **v0.2.0**
 
 ---
 
@@ -314,7 +314,7 @@ Playback uses `Enter`.
 
 ## Roadmap
 
-### v0.2
+### v0.2.0
 
 - [x] Tool icons
 - [x] Brush size control

@@ -1,11 +1,25 @@
 ﻿# Build output
 build/
+cmake-build-*/
+out/
 
-# VS generated files
+# Visual Studio / CMake generated files
 .vs/
+CMakeFiles/
+CMakeCache.txt
+cmake_install.cmake
 *.vcxproj.user
 
-# Third-party vendored dependencies (too large for git)
+# Editor / local tool state
+.vscode/
+.cursor/
+.idea/
+
+# Runtime UI state
+imgui.ini
+**/imgui.ini
+
+# Third-party vendored dependencies downloaded by setup scripts
 third_party/imgui/
 third_party/stb/
 third_party/nlohmann/
@@ -18,13 +32,22 @@ third_party/gif-h/
 *.ilk
 *.exp
 *.lib
+*.dll
+*.dylib
+*.so
+*.a
 
-# Runtime outputs
+# Runtime / export outputs
 output.gif
-imgui.ini
+exports/
+captures/
 
-imgui.ini
+# Archives / packages
+*.zip
+*.7z
+*.tar.gz
+*.rar
 
-
-**/imgui.ini
-
+# OS files
+.DS_Store
+Thumbs.db

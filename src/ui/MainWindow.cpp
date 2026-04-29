@@ -376,7 +376,7 @@ void MainWindow::renderMenuBar() {
     if (m_showAbout) ImGui::OpenPopup("About##modal");
     if (ImGui::BeginPopupModal("About##modal", nullptr,
             ImGuiWindowFlags_AlwaysAutoResize)) {
-        ImGui::Text("Framenote Studio v0.1");
+        ImGui::Text("Framenote Studio v0.2.0");
         ImGui::Text("Mascot: Nibbit :)");
         ImGui::Separator();
         ImGui::Text("Built with SDL3 + Dear ImGui");

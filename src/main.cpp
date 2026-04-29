@@ -24,7 +24,7 @@ int main(int argc, char* argv[]) {
     }
 
     SDL_Window* window = SDL_CreateWindow(
-        "Framenote Studio v0.2",
+        "Framenote Studio v0.2.0",
         WINDOW_W, WINDOW_H,
         SDL_WINDOW_RESIZABLE | SDL_WINDOW_HIGH_PIXEL_DENSITY
     );
