@@ -3,6 +3,7 @@
 #include "ui/TimelinePanel.h"
 #include "ui/ToolsPanel.h"
 #include "ui/PalettePanel.h"
+#include "ui/Theme.h"
 
 #include <cstdlib>
 #include <cstdint>
@@ -32,30 +33,32 @@ static void drawRecentThumbnail(
     ImVec2 thumbSize,
     bool exists
 ) {
+    bool isDark = (Theme::current() == ThemeMode::Dark);
+
     ImVec2 thumbMax = {
         thumbPos.x + thumbSize.x,
         thumbPos.y + thumbSize.y
     };
 
-    dl->AddRectFilled(
-        thumbPos,
-        thumbMax,
-        exists ? IM_COL32(35, 35, 42, 255) : IM_COL32(55, 35, 35, 255),
-        5.0f
-    );
+    // Background
+    ImU32 bgColor = exists
+        ? (isDark ? IM_COL32(35, 35, 42, 255)  : IM_COL32(210, 210, 215, 255))
+        : (isDark ? IM_COL32(55, 35, 35, 255)  : IM_COL32(230, 200, 200, 255));
 
+    dl->AddRectFilled(thumbPos, thumbMax, bgColor, 5.0f);
+
+    // Checkerboard (transparent area indicator)
     float checkerSize = 6.0f;
 
     for (float y = thumbPos.y; y < thumbMax.y; y += checkerSize) {
         for (float x = thumbPos.x; x < thumbMax.x; x += checkerSize) {
             int cx = static_cast<int>((x - thumbPos.x) / checkerSize);
             int cy = static_cast<int>((y - thumbPos.y) / checkerSize);
-
             bool light = ((cx + cy) % 2) == 0;
 
             ImU32 checkerColor = light
-                ? IM_COL32(80, 80, 85, 255)
-                : IM_COL32(55, 55, 60, 255);
+                ? (isDark ? IM_COL32(80, 80, 85, 255)  : IM_COL32(190, 190, 195, 255))
+                : (isDark ? IM_COL32(55, 55, 60, 255)  : IM_COL32(165, 165, 170, 255));
 
             dl->AddRectFilled(
                 {x, y},
@@ -108,7 +111,7 @@ static void drawRecentThumbnail(
                 thumbPos.y + (thumbSize.y - textSize.y) * 0.5f
             },
             exists
-                ? IM_COL32(220, 220, 230, 255)
+                ? (isDark ? IM_COL32(220, 220, 230, 255) : IM_COL32(50, 50, 60, 255))
                 : IM_COL32(255, 120, 120, 255),
             label
         );
@@ -117,7 +120,9 @@ static void drawRecentThumbnail(
     dl->AddRect(
         thumbPos,
         thumbMax,
-        exists ? IM_COL32(95, 98, 115, 255) : IM_COL32(210, 95, 95, 255),
+        exists
+            ? (isDark ? IM_COL32(95, 98, 115, 255) : IM_COL32(150, 150, 160, 255))
+            : IM_COL32(210, 95, 95, 255),
         5.0f,
         0,
         1.5f
@@ -130,6 +135,8 @@ static void drawRecoveryThumbnail(
     ImVec2 thumbPos,
     ImVec2 thumbSize
 ) {
+    bool isDark = (Theme::current() == ThemeMode::Dark);
+
     ImVec2 thumbMax = {
         thumbPos.x + thumbSize.x,
         thumbPos.y + thumbSize.y
@@ -138,7 +145,7 @@ static void drawRecoveryThumbnail(
     dl->AddRectFilled(
         thumbPos,
         thumbMax,
-        IM_COL32(35, 35, 42, 255),
+        isDark ? IM_COL32(35, 35, 42, 255) : IM_COL32(210, 210, 215, 255),
         5.0f
     );
 
@@ -148,12 +155,11 @@ static void drawRecoveryThumbnail(
         for (float x = thumbPos.x; x < thumbMax.x; x += checkerSize) {
             int cx = static_cast<int>((x - thumbPos.x) / checkerSize);
             int cy = static_cast<int>((y - thumbPos.y) / checkerSize);
-
             bool light = ((cx + cy) % 2) == 0;
 
             ImU32 checkerColor = light
-                ? IM_COL32(80, 80, 85, 255)
-                : IM_COL32(55, 55, 60, 255);
+                ? (isDark ? IM_COL32(80, 80, 85, 255)  : IM_COL32(190, 190, 195, 255))
+                : (isDark ? IM_COL32(55, 55, 60, 255)  : IM_COL32(165, 165, 170, 255));
 
             dl->AddRectFilled(
                 {x, y},
@@ -205,7 +211,7 @@ static void drawRecoveryThumbnail(
                 thumbPos.x + (thumbSize.x - textSize.x) * 0.5f,
                 thumbPos.y + (thumbSize.y - textSize.y) * 0.5f
             },
-            IM_COL32(220, 220, 230, 255),
+            isDark ? IM_COL32(220, 220, 230, 255) : IM_COL32(50, 50, 60, 255),
             label
         );
     }
@@ -213,7 +219,7 @@ static void drawRecoveryThumbnail(
     dl->AddRect(
         thumbPos,
         thumbMax,
-        IM_COL32(95, 98, 115, 255),
+        isDark ? IM_COL32(95, 98, 115, 255) : IM_COL32(150, 150, 160, 255),
         5.0f,
         0,
         1.5f
@@ -808,22 +814,24 @@ void TabManager::renderHomeTab(ToolManager& toolManager) {
                 !homeInteractionsBlocked &&
                 ImGui::IsMouseHoveringRect(cardMin, cardMax, true);
 
+            bool isDarkCard = (Theme::current() == ThemeMode::Dark);
+
             ImU32 bgColor = exists
-                ? IM_COL32(28, 28, 31, 255)
-                : IM_COL32(45, 28, 28, 255);
+                ? (isDarkCard ? IM_COL32(28, 28, 31, 255)  : IM_COL32(225, 225, 228, 255))
+                : (isDarkCard ? IM_COL32(45, 28, 28, 255)  : IM_COL32(235, 215, 215, 255));
 
             if (cardHovered && exists)
-                bgColor = IM_COL32(36, 38, 43, 255);
+                bgColor = isDarkCard ? IM_COL32(36, 38, 43, 255) : IM_COL32(212, 214, 220, 255);
 
             if (entry.pinned && exists) {
                 bgColor = cardHovered
-                    ? IM_COL32(39, 43, 48, 255)
-                    : IM_COL32(32, 34, 39, 255);
+                    ? (isDarkCard ? IM_COL32(39, 43, 48, 255) : IM_COL32(205, 215, 225, 255))
+                    : (isDarkCard ? IM_COL32(32, 34, 39, 255) : IM_COL32(215, 220, 230, 255));
             }
 
             ImU32 borderColor = exists
-                ? IM_COL32(70, 72, 82, 255)
-                : IM_COL32(170, 80, 80, 255);
+                ? (isDarkCard ? IM_COL32(70, 72, 82, 255)  : IM_COL32(180, 182, 192, 255))
+                : (isDarkCard ? IM_COL32(170, 80, 80, 255) : IM_COL32(200, 130, 130, 255));
 
             if (entry.pinned && exists)
                 borderColor = IM_COL32(44, 184, 213, 210);
