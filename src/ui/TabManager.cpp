@@ -309,6 +309,9 @@ void TabManager::render(ToolManager& toolManager) {
         m_showNewDialog = false;
     }
 
+    ImGui::SetNextWindowPos(
+        ImGui::GetMainViewport()->GetCenter(),
+        ImGuiCond_Always, {0.5f, 0.5f});
     if (ImGui::BeginPopupModal(
             "New Document##dlg",
             nullptr,
@@ -477,6 +480,9 @@ void TabManager::renderTabBar() {
         if (ImGui::SmallButton(closeId.c_str())) {
             if (m_tabs[i]->document->isDirty()) {
                 m_pendingCloseIndex = i;
+                ImGui::SetNextWindowPos(
+                    ImGui::GetMainViewport()->GetCenter(),
+                    ImGuiCond_Always, {0.5f, 0.5f});
                 ImGui::OpenPopup("Unsaved Changes##close");
             }
             else {
@@ -583,6 +589,9 @@ void TabManager::renderTabBar() {
         m_draggingTab = -1;
     }
 
+    ImGui::SetNextWindowPos(
+        ImGui::GetMainViewport()->GetCenter(),
+        ImGuiCond_Always, {0.5f, 0.5f});
     if (ImGui::BeginPopupModal(
             "Unsaved Changes##close",
             nullptr,
@@ -744,11 +753,17 @@ void TabManager::renderHomeTab(ToolManager& toolManager) {
     ImGui::BeginDisabled(m_recentFiles.entries().empty());
 
     if (ImGui::SmallButton("Clear")) {
+        ImGui::SetNextWindowPos(
+            ImGui::GetMainViewport()->GetCenter(),
+            ImGuiCond_Always, {0.5f, 0.5f});
         ImGui::OpenPopup("Clear Recent Projects##home");
     }
 
     ImGui::EndDisabled();
 
+    ImGui::SetNextWindowPos(
+        ImGui::GetMainViewport()->GetCenter(),
+        ImGuiCond_Always, {0.5f, 0.5f});
     if (ImGui::BeginPopupModal(
             "Clear Recent Projects##home",
             nullptr,
@@ -1099,6 +1114,9 @@ void TabManager::renderHomeTab(ToolManager& toolManager) {
         m_showRecoverDialog = false;
     }
 
+    ImGui::SetNextWindowPos(
+        ImGui::GetMainViewport()->GetCenter(),
+        ImGuiCond_Always, {0.5f, 0.5f});
     if (ImGui::BeginPopupModal(
             "Recover Files##home",
             nullptr,

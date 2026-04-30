@@ -24,7 +24,7 @@ int main(int argc, char* argv[]) {
     }
 
     SDL_Window* window = SDL_CreateWindow(
-        "Framenote Studio v0.2.0",
+        "Framenote Studio v0.2",
         WINDOW_W, WINDOW_H,
         SDL_WINDOW_RESIZABLE | SDL_WINDOW_HIGH_PIXEL_DENSITY
     );
@@ -109,7 +109,12 @@ int main(int argc, char* argv[]) {
 
         mainWindow.render();
 
-        if (showQuitDialog) ImGui::OpenPopup("Quit##confirm");
+        if (showQuitDialog)
+            ImGui::OpenPopup("Quit##confirm");
+
+        ImGui::SetNextWindowPos(
+            ImGui::GetMainViewport()->GetCenter(),
+            ImGuiCond_Always, {0.5f, 0.5f});
         if (ImGui::BeginPopupModal("Quit##confirm", nullptr,
                 ImGuiWindowFlags_AlwaysAutoResize)) {
             ImGui::Text("You have unsaved changes.\nDo you want to save before quitting?");
