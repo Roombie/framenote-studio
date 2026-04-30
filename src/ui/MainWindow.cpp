@@ -81,6 +81,11 @@ void MainWindow::render() {
                 if (doc) {
                     std::string name = path.substr(path.find_last_of("/\\") + 1);
                     m_tabManager->openDocument(std::move(doc), name, path);
+
+                    if (auto* opened = m_tabManager->activeTab()) {
+                        m_tabManager->recordRecentFile(path, *opened->document);
+                    }
+
                 } else {
                     m_statusMsg = "Open failed: " + err;
                 }
@@ -101,6 +106,7 @@ void MainWindow::render() {
                             tab->document->clearDirty();
                             tab->name = path.substr(path.find_last_of("/\\") + 1);
                             m_statusMsg = "Saved!";
+                            m_tabManager->recordRecentFile(path, *tab->document);
                         }
                     }
                 } else {
@@ -108,6 +114,7 @@ void MainWindow::render() {
                     if (FileManager::save(*tab->document, tab->document->filePath(), err)) {
                         tab->document->clearDirty();
                         m_statusMsg = "Saved!";
+                        m_tabManager->recordRecentFile(tab->document->filePath(), *tab->document);
                     }
                 }
             }
@@ -126,6 +133,7 @@ void MainWindow::render() {
                         tab->document->clearDirty();
                         tab->name = path.substr(path.find_last_of("/\\") + 1);
                         m_statusMsg = "Saved!";
+                        m_tabManager->recordRecentFile(path, *tab->document);
                     }
                 }
             }
@@ -192,6 +200,11 @@ void MainWindow::renderMenuBar() {
                     if (doc) {
                         std::string name = path.substr(path.find_last_of("/\\") + 1);
                         m_tabManager->openDocument(std::move(doc), name, path);
+
+                        if (auto* opened = m_tabManager->activeTab()) {
+                            m_tabManager->recordRecentFile(path, *opened->document);
+                        }
+
                     } else {
                         m_statusMsg = "Open failed: " + err;
                     }
@@ -213,6 +226,7 @@ void MainWindow::renderMenuBar() {
                             tab->document->clearDirty();
                             tab->name = path.substr(path.find_last_of("/\\") + 1);
                             m_statusMsg = "Saved!";
+                            m_tabManager->recordRecentFile(path, *tab->document);
                         } else {
                             m_statusMsg = "Save failed: " + err;
                         }
@@ -222,8 +236,7 @@ void MainWindow::renderMenuBar() {
                     if (FileManager::save(*tab->document, tab->document->filePath(), err)) {
                         tab->document->clearDirty();
                         m_statusMsg = "Saved!";
-                    } else {
-                        m_statusMsg = "Save failed: " + err;
+                        m_tabManager->recordRecentFile(tab->document->filePath(), *tab->document);
                     }
                 }
             }
@@ -241,6 +254,7 @@ void MainWindow::renderMenuBar() {
                         tab->document->clearDirty();
                         tab->name = path.substr(path.find_last_of("/\\") + 1);
                         m_statusMsg = "Saved!";
+                        m_tabManager->recordRecentFile(path, *tab->document);
                     } else {
                         m_statusMsg = "Save failed: " + err;
                     }

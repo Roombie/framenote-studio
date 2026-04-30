@@ -8,6 +8,7 @@
 #include "core/DocumentTab.h"
 #include "tools/ToolManager.h"
 #include "ui/IconLoader.h"
+#include "io/RecentFiles.h"
 
 namespace Framenote {
 
@@ -32,6 +33,8 @@ public:
         m_newDocFps = 8;
         strncpy(m_newDocName, "untitled", sizeof(m_newDocName));
     }
+    
+    void recordRecentFile(const std::string& path, const Document& doc);
 
 private:
     void renderHomeTab(ToolManager& toolManager);
@@ -52,6 +55,9 @@ private:
     int  m_newDocFps       = 8;
     char m_newDocName[64]  = "untitled";
     ToolIcons* m_icons     = nullptr;
+
+    RecentFiles m_recentFiles;
+    std::string m_homeStatusMsg;
 };
 
 } // namespace Framenote

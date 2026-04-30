@@ -46,6 +46,7 @@ set(SOURCES
     src/io/GifExporter.cpp
     src/io/PngExporter.cpp
     src/io/FileDialog.cpp
+    src/io/RecentFiles.cpp
 
     # Dear ImGui (vendored)
     third_party/imgui/imgui.cpp

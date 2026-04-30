@@ -9,6 +9,7 @@
 #include <SDL3/SDL.h>
 #include "io/FileDialog.h"
 #include "io/FileManager.h"
+#include <filesystem>
 
 namespace Framenote {
 
@@ -324,15 +325,221 @@ void TabManager::renderHomeTab(ToolManager& toolManager) {
             if (doc) {
                 std::string name = path.substr(path.find_last_of("/\\") + 1);
                 openDocument(std::move(doc), name, path);
+
+                if (auto* opened = activeTab()) {
+                    recordRecentFile(path, *opened->document);
+                }
             }
         }
     }
 
-    ImGui::SetCursorPos({centerX - 120, startY + 210});
-    ImGui::TextDisabled("Recent files");
+    float recentX = centerX - 280.0f;
+    float recentY = startY + 210.0f;
+    float recentW = 560.0f;
+    float recentH = 230.0f;
 
-    ImGui::SetCursorPos({centerX - 120, startY + 230});
-    ImGui::TextDisabled("(No recent files)");
+    ImGui::SetCursorPos({recentX, recentY});
+    ImGui::BeginGroup();
+
+    ImGui::Text("Recent Projects");
+
+    ImGui::SameLine();
+
+    bool showThumbs = m_recentFiles.showThumbnails();
+    if (ImGui::Checkbox("Thumbnails", &showThumbs)) {
+        m_recentFiles.setShowThumbnails(showThumbs);
+    }
+
+    ImGui::SameLine();
+
+    bool showPaths = m_recentFiles.showPaths();
+    if (ImGui::Checkbox("Paths", &showPaths)) {
+        m_recentFiles.setShowPaths(showPaths);
+    }
+
+    ImGui::SameLine();
+
+    ImGui::BeginDisabled(m_recentFiles.entries().empty());
+    if (ImGui::SmallButton("Clear")) {
+        ImGui::OpenPopup("Clear Recent Projects##home");
+    }
+    ImGui::EndDisabled();
+
+    if (ImGui::BeginPopupModal(
+            "Clear Recent Projects##home",
+            nullptr,
+            ImGuiWindowFlags_AlwaysAutoResize)) {
+        ImGui::Text("Clear all recent projects?");
+        ImGui::Separator();
+
+        if (ImGui::Button("Yes", {80, 0})) {
+            m_recentFiles.clear();
+            ImGui::CloseCurrentPopup();
+        }
+
+        ImGui::SameLine();
+
+        if (ImGui::Button("Cancel", {80, 0})) {
+            ImGui::CloseCurrentPopup();
+        }
+
+        ImGui::EndPopup();
+    }
+
+    ImGui::BeginChild(
+        "##recent-projects-list",
+        {recentW, recentH},
+        true,
+        ImGuiWindowFlags_AlwaysVerticalScrollbar
+    );
+
+    const auto& recent = m_recentFiles.entries();
+
+    if (recent.empty()) {
+        ImGui::TextDisabled("(No recent files)");
+    }
+    else {
+        int removeIndex = -1;
+
+        for (int i = 0; i < static_cast<int>(recent.size()); ++i) {
+            const auto& entry = recent[i];
+
+            bool exists = m_recentFiles.existsOnDisk(entry);
+
+            ImGui::PushID(i);
+
+            if (m_recentFiles.showThumbnails()) {
+                ImDrawList* dl = ImGui::GetWindowDrawList();
+
+                ImVec2 thumbPos = ImGui::GetCursorScreenPos();
+                ImVec2 thumbSize = {44.0f, 44.0f};
+
+                dl->AddRectFilled(
+                    thumbPos,
+                    {thumbPos.x + thumbSize.x, thumbPos.y + thumbSize.y},
+                    exists ? IM_COL32(35, 35, 40, 255) : IM_COL32(45, 30, 30, 255),
+                    4.0f
+                );
+
+                dl->AddRect(
+                    thumbPos,
+                    {thumbPos.x + thumbSize.x, thumbPos.y + thumbSize.y},
+                    exists ? IM_COL32(90, 90, 105, 255) : IM_COL32(180, 80, 80, 255),
+                    4.0f,
+                    0,
+                    1.5f
+                );
+
+                const char* label = exists ? "FN" : "?";
+                ImVec2 textSize = ImGui::CalcTextSize(label);
+
+                dl->AddText(
+                    {
+                        thumbPos.x + (thumbSize.x - textSize.x) * 0.5f,
+                        thumbPos.y + (thumbSize.y - textSize.y) * 0.5f
+                    },
+                    exists ? IM_COL32(220, 220, 230, 255) : IM_COL32(255, 120, 120, 255),
+                    label
+                );
+
+                ImGui::Dummy(thumbSize);
+                ImGui::SameLine();
+            }
+
+            ImGui::BeginGroup();
+
+            std::string title = entry.pinned ? "★ " + entry.name : entry.name;
+
+            if (!exists)
+                title += "  (missing)";
+
+            ImGui::BeginDisabled(!exists);
+
+            if (ImGui::Selectable(title.c_str(), false, 0, {0, 0})) {
+                std::string err;
+                auto doc = FileManager::load(entry.path, err);
+
+                if (doc) {
+                    std::string name = entry.path.substr(entry.path.find_last_of("/\\") + 1);
+                    openDocument(std::move(doc), name, entry.path);
+
+                    if (auto* opened = activeTab()) {
+                        recordRecentFile(entry.path, *opened->document);
+                    }
+
+                    m_homeStatusMsg.clear();
+                }
+                else {
+                    m_homeStatusMsg = "Open failed: " + err;
+                }
+            }
+
+            if (!m_recentFiles.showPaths() && ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled)) {
+                ImGui::SetTooltip("%s", entry.path.c_str());
+            }
+
+            ImGui::EndDisabled();
+
+            if (entry.canvasWidth > 0 && entry.canvasHeight > 0) {
+                ImGui::TextDisabled(
+                    "%dx%d | %d fps | %d frame%s",
+                    entry.canvasWidth,
+                    entry.canvasHeight,
+                    entry.fps,
+                    entry.frameCount,
+                    entry.frameCount == 1 ? "" : "s"
+                );
+            }
+
+            if (m_recentFiles.showPaths()) {
+                ImGui::TextDisabled("%s", entry.path.c_str());
+            }
+
+            if (!entry.lastOpened.empty()) {
+                ImGui::TextDisabled("Last opened: %s", entry.lastOpened.c_str());
+            }
+
+            if (!exists) {
+                ImGui::TextColored(
+                    ImVec4(1.0f, 0.45f, 0.45f, 1.0f),
+                    "File not found"
+                );
+            }
+
+            if (ImGui::SmallButton(entry.pinned ? "Unpin" : "Pin")) {
+                m_recentFiles.togglePinned(entry.path);
+            }
+
+            ImGui::SameLine();
+
+            if (ImGui::SmallButton("Remove")) {
+                removeIndex = i;
+            }
+
+            ImGui::EndGroup();
+
+            ImGui::Separator();
+
+            ImGui::PopID();
+        }
+
+        if (removeIndex >= 0 && removeIndex < static_cast<int>(recent.size())) {
+            m_recentFiles.removePath(recent[removeIndex].path);
+        }
+    }
+
+    if (!m_homeStatusMsg.empty()) {
+        ImGui::Spacing();
+        ImGui::TextColored(
+            ImVec4(1.0f, 0.55f, 0.35f, 1.0f),
+            "%s",
+            m_homeStatusMsg.c_str()
+        );
+    }
+
+    ImGui::EndChild();
+
+    ImGui::EndGroup();
 
     float socialY = io.DisplaySize.y - tabBarH - 60;
     ImGui::SetCursorPos({centerX - 120, socialY});
@@ -443,6 +650,10 @@ DocumentTab* TabManager::activeTab() {
     if (m_activeIndex < 0 || m_activeIndex >= (int)m_tabs.size())
         return nullptr;
     return m_tabs[m_activeIndex].get();
+}
+
+void TabManager::recordRecentFile(const std::string& path, const Document& doc) {
+    m_recentFiles.addOrUpdate(path, doc);
 }
 
 void TabManager::openDocument(std::unique_ptr<Document> doc,
