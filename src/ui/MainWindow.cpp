@@ -54,6 +54,56 @@ MainWindow::MainWindow(TabManager* tabManager, ToolManager* toolManager)
     , m_toolManager(toolManager)
 {}
 
+void MainWindow::showError(const std::string& msg) {
+    m_errorMsg        = msg;
+    m_showErrorDialog = true;
+}
+
+void MainWindow::renderErrorDialog() {
+    if (m_showErrorDialog) {
+        ImGui::SetNextWindowPos(
+            ImGui::GetMainViewport()->GetCenter(),
+            ImGuiCond_Always, {0.5f, 0.5f});
+        ImGui::OpenPopup("Error##errDlg");
+        m_showErrorDialog = false;
+    }
+
+    ImGui::SetNextWindowPos(
+        ImGui::GetMainViewport()->GetCenter(),
+        ImGuiCond_Always, {0.5f, 0.5f});
+    ImGui::SetNextWindowSizeConstraints({320, 0}, {600, 400});
+    if (ImGui::BeginPopupModal("Error##errDlg", nullptr,
+            ImGuiWindowFlags_AlwaysAutoResize)) {
+        ImGui::TextWrapped("%s", m_errorMsg.c_str());
+        ImGui::Spacing();
+        ImGui::Separator();
+        ImGui::Spacing();
+        if (ImGui::Button("OK", {100, 0}))
+            ImGui::CloseCurrentPopup();
+        ImGui::EndPopup();
+    }
+}
+
+bool MainWindow::doSave(DocumentTab* tab, const std::string& path) {
+    std::string err;
+    if (FileManager::save(*tab->document, path, err)) {
+        // FileManager may have appended .framenote — use the canonical path
+        std::string finalPath = path;
+        if (finalPath.size() < 11 ||
+            finalPath.substr(finalPath.size() - 11) != ".framenote")
+            finalPath += ".framenote";
+
+        tab->document->setFilePath(finalPath);
+        tab->document->clearDirty();
+        tab->name = finalPath.substr(finalPath.find_last_of("/\\") + 1);
+        m_statusMsg = "Saved!";
+        m_tabManager->recordRecentFile(finalPath, *tab->document);
+        return true;
+    }
+    showError("Save failed:\n" + err);
+    return false;
+}
+
 void MainWindow::render() {
     renderMenuBar();
     m_tabManager->render(*m_toolManager);
@@ -61,6 +111,7 @@ void MainWindow::render() {
     renderCanvasSizeDialog();
     renderExportDialog();
     renderOnionOpacityDialog();
+    renderErrorDialog();
 
     // -- Global keyboard shortcuts ---------------------------------------------
     ImGuiIO& io = ImGui::GetIO();
@@ -88,7 +139,7 @@ void MainWindow::render() {
                     }
 
                 } else {
-                    m_statusMsg = "Open failed: " + err;
+                    showError("Open failed:\n" + err);
                 }
             }
         }
@@ -100,23 +151,10 @@ void MainWindow::render() {
                 if (tab->document->filePath().empty()) {
                     std::string path = FileDialog::saveFile(
                         FILTER_FRAMENOTE, "framenote", "Save Framenote File");
-                    if (!path.empty()) {
-                        std::string err;
-                        if (FileManager::save(*tab->document, path, err)) {
-                            tab->document->setFilePath(path);
-                            tab->document->clearDirty();
-                            tab->name = path.substr(path.find_last_of("/\\") + 1);
-                            m_statusMsg = "Saved!";
-                            m_tabManager->recordRecentFile(path, *tab->document);
-                        }
-                    }
+                    if (!path.empty())
+                        doSave(tab, path);
                 } else {
-                    std::string err;
-                    if (FileManager::save(*tab->document, tab->document->filePath(), err)) {
-                        tab->document->clearDirty();
-                        m_statusMsg = "Saved!";
-                        m_tabManager->recordRecentFile(tab->document->filePath(), *tab->document);
-                    }
+                    doSave(tab, tab->document->filePath());
                 }
             }
         }
@@ -127,16 +165,8 @@ void MainWindow::render() {
             if (tab) {
                 std::string path = FileDialog::saveFile(
                     FILTER_FRAMENOTE, "framenote", "Save As");
-                if (!path.empty()) {
-                    std::string err;
-                    if (FileManager::save(*tab->document, path, err)) {
-                        tab->document->setFilePath(path);
-                        tab->document->clearDirty();
-                        tab->name = path.substr(path.find_last_of("/\\") + 1);
-                        m_statusMsg = "Saved!";
-                        m_tabManager->recordRecentFile(path, *tab->document);
-                    }
-                }
+                if (!path.empty())
+                    doSave(tab, path);
             }
         }
 
@@ -207,7 +237,7 @@ void MainWindow::renderMenuBar() {
                         }
 
                     } else {
-                        m_statusMsg = "Open failed: " + err;
+                        showError("Open failed:\n" + err);
                     }
                 }
             }
@@ -220,25 +250,10 @@ void MainWindow::renderMenuBar() {
                 if (tab->document->filePath().empty()) {
                     std::string path = FileDialog::saveFile(
                         FILTER_FRAMENOTE, "framenote", "Save Framenote File");
-                    if (!path.empty()) {
-                        std::string err;
-                        if (FileManager::save(*tab->document, path, err)) {
-                            tab->document->setFilePath(path);
-                            tab->document->clearDirty();
-                            tab->name = path.substr(path.find_last_of("/\\") + 1);
-                            m_statusMsg = "Saved!";
-                            m_tabManager->recordRecentFile(path, *tab->document);
-                        } else {
-                            m_statusMsg = "Save failed: " + err;
-                        }
-                    }
+                    if (!path.empty())
+                        doSave(tab, path);
                 } else {
-                    std::string err;
-                    if (FileManager::save(*tab->document, tab->document->filePath(), err)) {
-                        tab->document->clearDirty();
-                        m_statusMsg = "Saved!";
-                        m_tabManager->recordRecentFile(tab->document->filePath(), *tab->document);
-                    }
+                    doSave(tab, tab->document->filePath());
                 }
             }
             ImGui::EndDisabled();
@@ -248,18 +263,8 @@ void MainWindow::renderMenuBar() {
             if (ImGui::MenuItem("Save As...", "Ctrl+Shift+S")) {
                 std::string path = FileDialog::saveFile(
                     FILTER_FRAMENOTE, "framenote", "Save As");
-                if (!path.empty()) {
-                    std::string err;
-                    if (FileManager::save(*tab->document, path, err)) {
-                        tab->document->setFilePath(path);
-                        tab->document->clearDirty();
-                        tab->name = path.substr(path.find_last_of("/\\") + 1);
-                        m_statusMsg = "Saved!";
-                        m_tabManager->recordRecentFile(path, *tab->document);
-                    } else {
-                        m_statusMsg = "Save failed: " + err;
-                    }
-                }
+                if (!path.empty())
+                    doSave(tab, path);
             }
             ImGui::EndDisabled();
 
@@ -419,7 +424,7 @@ void MainWindow::renderExportDialog() {
             if (GifExporter::exportGif(*tab->document, path, opts, err))
                 m_statusMsg = "GIF exported!";
             else
-                m_statusMsg = "Export failed: " + err;
+                showError("Export failed:\n" + err);
         }
     }
     else if (m_exportType == ExportType::PNG) {
@@ -429,7 +434,7 @@ void MainWindow::renderExportDialog() {
             if (PngExporter::exportFrame(*tab->document, fi, path, err))
                 m_statusMsg = "PNG exported!";
             else
-                m_statusMsg = "Export failed: " + err;
+                showError("Export failed:\n" + err);
         }
     }
     else if (m_exportType == ExportType::PNGSequence) {
@@ -442,7 +447,7 @@ void MainWindow::renderExportDialog() {
             if (PngExporter::exportSequence(*tab->document, base, err))
                 m_statusMsg = "PNG sequence exported!";
             else
-                m_statusMsg = "Export failed: " + err;
+                showError("Export failed:\n" + err);
         }
     }
 

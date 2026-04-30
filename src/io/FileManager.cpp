@@ -222,6 +222,13 @@ static bool readHexColor(const std::string& hex, Color& outColor) {
 bool FileManager::save(const Document& doc,
                        const std::string& path,
                        std::string& outError) {
+    // Enforce .framenote extension
+    std::string finalPath = path;
+    if (finalPath.size() < 11 ||
+        finalPath.substr(finalPath.size() - 11) != ".framenote") {
+        finalPath += ".framenote";
+    }
+
     json j;
 
     j["version"]          = FORMAT_VERSION;
@@ -231,51 +238,50 @@ bool FileManager::save(const Document& doc,
 
     // Palette
     json palette = json::array();
-
     for (int i = 0; i < doc.palette().size(); ++i) {
         Color c = doc.palette().color(i);
-
         char hex[10];
-
-        std::snprintf(
-            hex,
-            sizeof(hex),
-            "#%02X%02X%02X%02X",
-            c.r,
-            c.g,
-            c.b,
-            c.a
-        );
-
+        std::snprintf(hex, sizeof(hex), "#%02X%02X%02X%02X",
+                      c.r, c.g, c.b, c.a);
         palette.push_back(std::string(hex));
     }
-
     j["palette"] = palette;
 
     // Frames — each encoded as base64 PNG
     json frames = json::array();
-
     for (int i = 0; i < doc.frameCount(); ++i) {
         auto png = encodePNG(doc.frame(i));
-
-        frames.push_back({
-            {"pixels", base64Encode(png)}
-        });
+        if (png.empty()) {
+            outError = "Failed to encode frame " + std::to_string(i) + " as PNG";
+            return false;
+        }
+        frames.push_back({{"pixels", base64Encode(png)}});
     }
-
     j["frames"] = frames;
 
-    std::ofstream file(path, std::ios::binary);
+    // Atomic save: write to a temp file first, then rename.
+    // This ensures a failed write never corrupts the existing file.
+    std::string tmpPath = finalPath + ".tmp";
 
-    if (!file.is_open()) {
-        outError = "Cannot open file for writing: " + path;
-        return false;
-    }
+    {
+        std::ofstream tmp(tmpPath, std::ios::binary | std::ios::trunc);
+        if (!tmp.is_open()) {
+            outError = "Cannot open temp file for writing: " + tmpPath;
+            return false;
+        }
+        tmp << j.dump(2);
+        if (!tmp.good()) {
+            tmp.close();
+            std::remove(tmpPath.c_str());
+            outError = "Failed while writing file: " + tmpPath;
+            return false;
+        }
+    } // flush and close before rename
 
-    file << j.dump(2);
-
-    if (!file.good()) {
-        outError = "Failed while writing file: " + path;
+    // Replace the target file atomically
+    if (std::rename(tmpPath.c_str(), finalPath.c_str()) != 0) {
+        std::remove(tmpPath.c_str());
+        outError = "Failed to finalize save (rename failed): " + finalPath;
         return false;
     }
 
@@ -352,8 +358,12 @@ std::unique_ptr<Document> FileManager::load(const std::string& path,
                 outError = "Invalid .framenote file: fps must be an integer";
                 return nullptr;
             }
-
-            doc->setFps(j["fps"].get<int>());
+            int fps = j["fps"].get<int>();
+            if (fps < 1 || fps > 120) {
+                outError = "Invalid .framenote file: fps out of range (1-120)";
+                return nullptr;
+            }
+            doc->setFps(fps);
         }
 
         // Palette
