@@ -1,19 +1,88 @@
 #include "io/RecentFiles.h"
 
+#include "core/Frame.h"
+
 #include <nlohmann/json.hpp>
 #include <SDL3/SDL.h>
 
 #include <algorithm>
 #include <chrono>
+#include <cstdint>
 #include <ctime>
 #include <filesystem>
 #include <fstream>
 #include <iomanip>
 #include <sstream>
+#include <vector>
 
 using json = nlohmann::json;
 
 namespace Framenote {
+
+std::vector<uint32_t> RecentFiles::buildThumbnail(
+    const Document& doc,
+    int& outWidth,
+    int& outHeight
+) {
+    constexpr int ThumbSize = 16;
+
+    outWidth = ThumbSize;
+    outHeight = ThumbSize;
+
+    std::vector<uint32_t> pixels(ThumbSize * ThumbSize, 0x00000000);
+
+    if (doc.frameCount() <= 0)
+        return pixels;
+
+    int srcW = doc.canvasSize().width;
+    int srcH = doc.canvasSize().height;
+
+    if (srcW <= 0 || srcH <= 0)
+        return pixels;
+
+    const Frame& frame = doc.frame(0);
+
+    float scaleX = static_cast<float>(ThumbSize) / static_cast<float>(srcW);
+    float scaleY = static_cast<float>(ThumbSize) / static_cast<float>(srcH);
+    float scale = std::min(scaleX, scaleY);
+
+    int drawW = static_cast<int>(srcW * scale);
+    int drawH = static_cast<int>(srcH * scale);
+
+    if (drawW < 1) drawW = 1;
+    if (drawH < 1) drawH = 1;
+
+    if (drawW > ThumbSize) drawW = ThumbSize;
+    if (drawH > ThumbSize) drawH = ThumbSize;
+
+    int offsetX = (ThumbSize - drawW) / 2;
+    int offsetY = (ThumbSize - drawH) / 2;
+
+    for (int y = 0; y < drawH; ++y) {
+        int srcY = (y * srcH) / drawH;
+
+        if (srcY < 0)
+            srcY = 0;
+
+        if (srcY >= srcH)
+            srcY = srcH - 1;
+
+        for (int x = 0; x < drawW; ++x) {
+            int srcX = (x * srcW) / drawW;
+
+            if (srcX < 0)
+                srcX = 0;
+
+            if (srcX >= srcW)
+                srcX = srcW - 1;
+
+            pixels[(offsetY + y) * ThumbSize + (offsetX + x)] =
+                frame.getPixel(srcX, srcY);
+        }
+    }
+
+    return pixels;
+}
 
 RecentFiles::RecentFiles() {
     load();
@@ -98,6 +167,39 @@ void RecentFiles::load() {
                 entry.frameCount   = item.value("frameCount", 0);
                 entry.pinned       = item.value("pinned", false);
 
+                entry.thumbnailWidth  = item.value("thumbnailWidth", 0);
+                entry.thumbnailHeight = item.value("thumbnailHeight", 0);
+
+                if (item.contains("thumbnailPixels") &&
+                    item["thumbnailPixels"].is_array()) {
+                    for (const auto& px : item["thumbnailPixels"]) {
+                        if (px.is_number_unsigned()) {
+                            uint64_t value = px.get<uint64_t>();
+
+                            if (value <= 0xFFFFFFFFull) {
+                                entry.thumbnailPixels.push_back(
+                                    static_cast<uint32_t>(value)
+                                );
+                            }
+                        }
+                        else if (px.is_number_integer()) {
+                            int64_t value = px.get<int64_t>();
+
+                            if (value >= 0 && value <= 0xFFFFFFFFll) {
+                                entry.thumbnailPixels.push_back(
+                                    static_cast<uint32_t>(value)
+                                );
+                            }
+                        }
+                    }
+                }
+
+                if (!entry.hasThumbnail()) {
+                    entry.thumbnailWidth = 0;
+                    entry.thumbnailHeight = 0;
+                    entry.thumbnailPixels.clear();
+                }
+
                 if (!entry.path.empty())
                     m_entries.push_back(entry);
             }
@@ -120,7 +222,7 @@ void RecentFiles::save() const {
     json recent = json::array();
 
     for (const auto& entry : m_entries) {
-        recent.push_back({
+        json item = {
             {"path", entry.path},
             {"name", entry.name},
             {"lastOpened", entry.lastOpened},
@@ -129,7 +231,19 @@ void RecentFiles::save() const {
             {"fps", entry.fps},
             {"frameCount", entry.frameCount},
             {"pinned", entry.pinned}
-        });
+        };
+
+        if (entry.hasThumbnail()) {
+            item["thumbnailWidth"] = entry.thumbnailWidth;
+            item["thumbnailHeight"] = entry.thumbnailHeight;
+            item["thumbnailPixels"] = json::array();
+
+            for (uint32_t px : entry.thumbnailPixels) {
+                item["thumbnailPixels"].push_back(px);
+            }
+        }
+
+        recent.push_back(item);
     }
 
     j["recentFiles"] = recent;
@@ -172,6 +286,12 @@ void RecentFiles::addOrUpdate(const std::string& path, const Document& doc) {
     entry.fps          = doc.fps();
     entry.frameCount   = doc.frameCount();
     entry.pinned       = oldPinned;
+
+    entry.thumbnailPixels = buildThumbnail(
+        doc,
+        entry.thumbnailWidth,
+        entry.thumbnailHeight
+    );
 
     m_entries.push_back(entry);
 

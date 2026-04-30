@@ -5,6 +5,7 @@
 #include "ui/PalettePanel.h"
 
 #include <cstdlib>
+#include <cstdint>
 #include <imgui.h>
 #include <imgui_internal.h>
 #include <SDL3/SDL.h>
@@ -23,6 +24,106 @@ namespace Framenote {
 TabManager::TabManager(SDL_Renderer* renderer, ToolIcons* icons)
     : m_sdlRenderer(renderer), m_icons(icons)
 {}
+
+static void drawRecentThumbnail(
+    ImDrawList* dl,
+    const RecentFileEntry& entry,
+    ImVec2 thumbPos,
+    ImVec2 thumbSize,
+    bool exists
+) {
+    ImVec2 thumbMax = {
+        thumbPos.x + thumbSize.x,
+        thumbPos.y + thumbSize.y
+    };
+
+    dl->AddRectFilled(
+        thumbPos,
+        thumbMax,
+        exists ? IM_COL32(35, 35, 42, 255) : IM_COL32(55, 35, 35, 255),
+        5.0f
+    );
+
+    // Checkerboard background.
+    float checkerSize = 6.0f;
+
+    for (float y = thumbPos.y; y < thumbMax.y; y += checkerSize) {
+        for (float x = thumbPos.x; x < thumbMax.x; x += checkerSize) {
+            int cx = static_cast<int>((x - thumbPos.x) / checkerSize);
+            int cy = static_cast<int>((y - thumbPos.y) / checkerSize);
+
+            bool light = ((cx + cy) % 2) == 0;
+
+            ImU32 checkerColor = light
+                ? IM_COL32(80, 80, 85, 255)
+                : IM_COL32(55, 55, 60, 255);
+
+            dl->AddRectFilled(
+                {x, y},
+                {
+                    std::min(x + checkerSize, thumbMax.x),
+                    std::min(y + checkerSize, thumbMax.y)
+                },
+                checkerColor
+            );
+        }
+    }
+
+    if (entry.hasThumbnail()) {
+        float pixelW = thumbSize.x / static_cast<float>(entry.thumbnailWidth);
+        float pixelH = thumbSize.y / static_cast<float>(entry.thumbnailHeight);
+
+        for (int py = 0; py < entry.thumbnailHeight; ++py) {
+            for (int px = 0; px < entry.thumbnailWidth; ++px) {
+                uint32_t argb =
+                    entry.thumbnailPixels[py * entry.thumbnailWidth + px];
+
+                uint8_t a = static_cast<uint8_t>((argb >> 24) & 0xFF);
+                uint8_t r = static_cast<uint8_t>((argb >> 16) & 0xFF);
+                uint8_t g = static_cast<uint8_t>((argb >> 8) & 0xFF);
+                uint8_t b = static_cast<uint8_t>(argb & 0xFF);
+
+                if (a == 0)
+                    continue;
+
+                float x0 = thumbPos.x + px * pixelW;
+                float y0 = thumbPos.y + py * pixelH;
+                float x1 = thumbPos.x + (px + 1) * pixelW;
+                float y1 = thumbPos.y + (py + 1) * pixelH;
+
+                dl->AddRectFilled(
+                    {x0, y0},
+                    {x1, y1},
+                    IM_COL32(r, g, b, a)
+                );
+            }
+        }
+    }
+    else {
+        const char* label = exists ? "FN" : "?";
+        ImVec2 textSize = ImGui::CalcTextSize(label);
+
+        dl->AddText(
+            {
+                thumbPos.x + (thumbSize.x - textSize.x) * 0.5f,
+                thumbPos.y + (thumbSize.y - textSize.y) * 0.5f
+            },
+            exists
+                ? IM_COL32(220, 220, 230, 255)
+                : IM_COL32(255, 120, 120, 255),
+            label
+        );
+    }
+
+    dl->AddRect(
+        thumbPos,
+        thumbMax,
+        exists ? IM_COL32(95, 98, 115, 255) : IM_COL32(210, 95, 95, 255),
+        5.0f,
+        0,
+        1.5f
+    );
+}
 
 static std::string fitTextMiddleEllipsis(const std::string& text, float maxWidth) {
     if (text.empty())
@@ -129,8 +230,8 @@ void TabManager::render(ToolManager& toolManager) {
         ImGui::InputInt("H##new", &m_newDocH);
 
         // Clamp to sane limits
-        if (m_newDocW <    1) m_newDocW =    1;
-        if (m_newDocH <    1) m_newDocH =    1;
+        if (m_newDocW < 1) m_newDocW = 1;
+        if (m_newDocH < 1) m_newDocH = 1;
         if (m_newDocW > 4096) m_newDocW = 4096;
         if (m_newDocH > 4096) m_newDocH = 4096;
 
@@ -152,11 +253,15 @@ void TabManager::render(ToolManager& toolManager) {
         ImGui::Separator();
 
         if (ImGui::SmallButton("-##new_fps")) m_newDocFps--;
+
         ImGui::SameLine();
         ImGui::SetNextItemWidth(55.0f);
         ImGui::InputInt("##new_fps_value", &m_newDocFps, 0, 0);
+
         ImGui::SameLine();
+
         if (ImGui::SmallButton("+##new_fps")) m_newDocFps++;
+
         ImGui::SameLine();
         ImGui::Text("FPS");
 
@@ -173,6 +278,7 @@ void TabManager::render(ToolManager& toolManager) {
                 m_newDocH,
                 m_newDocFps
             );
+
             ImGui::CloseCurrentPopup();
         }
 
@@ -624,35 +730,7 @@ void TabManager::renderHomeTab(ToolManager& toolManager) {
                     thumbPos.y + thumbSize.y
                 };
 
-                dl->AddRectFilled(
-                    thumbPos,
-                    thumbMax,
-                    exists ? IM_COL32(35, 35, 42, 255) : IM_COL32(55, 35, 35, 255),
-                    5.0f
-                );
-
-                dl->AddRect(
-                    thumbPos,
-                    thumbMax,
-                    exists ? IM_COL32(95, 98, 115, 255) : IM_COL32(210, 95, 95, 255),
-                    5.0f,
-                    0,
-                    1.5f
-                );
-
-                const char* label = exists ? "FN" : "?";
-                ImVec2 textSize = ImGui::CalcTextSize(label);
-
-                dl->AddText(
-                    {
-                        thumbPos.x + (thumbSize.x - textSize.x) * 0.5f,
-                        thumbPos.y + (thumbSize.y - textSize.y) * 0.5f
-                    },
-                    exists
-                        ? IM_COL32(220, 220, 230, 255)
-                        : IM_COL32(255, 120, 120, 255),
-                    label
-                );
+                drawRecentThumbnail(dl, entry, thumbPos, thumbSize, exists);
 
                 ImGui::Dummy(thumbSize);
                 ImGui::SameLine();
@@ -924,8 +1002,8 @@ void TabManager::setupDefaultDockLayout(ImGuiID dockspaceId) {
 }
 
 void TabManager::renderDocumentTab(DocumentTab& tab, ToolManager& toolManager) {
-    ImGuiIO& io      = ImGui::GetIO();
-    float tabBarH    = ImGui::GetFrameHeight() + 32;
+    ImGuiIO& io   = ImGui::GetIO();
+    float tabBarH = ImGui::GetFrameHeight() + 32;
 
     // Full-screen host window for the DockSpace — no decorations, no input
     ImGui::SetNextWindowPos({0, tabBarH}, ImGuiCond_Always);
@@ -1005,6 +1083,11 @@ void TabManager::openDocument(
     const std::string& name,
     const std::string& path
 ) {
+    // The path is only used for recording recent files and showing in the title bar,
+    // so it's not critical that it's always correct. If it's invalid or empty,
+    // we can just treat it as an unnamed/unsaved document without recent file tracking.
+    (void)path;
+
     auto tab = std::make_unique<DocumentTab>();
 
     tab->name     = name;

@@ -2,6 +2,7 @@
 
 #include "core/Document.h"
 
+#include <cstdint>
 #include <string>
 #include <vector>
 
@@ -17,7 +18,18 @@ struct RecentFileEntry {
     int fps          = 0;
     int frameCount   = 0;
 
+    int thumbnailWidth  = 0;
+    int thumbnailHeight = 0;
+    std::vector<uint32_t> thumbnailPixels;
+
     bool pinned = false;
+
+    bool hasThumbnail() const {
+        return thumbnailWidth > 0 &&
+               thumbnailHeight > 0 &&
+               thumbnailPixels.size() ==
+                   static_cast<size_t>(thumbnailWidth * thumbnailHeight);
+    }
 };
 
 class RecentFiles {
@@ -45,8 +57,15 @@ public:
 
 private:
     std::string configPath() const;
+
     static std::string fileNameFromPath(const std::string& path);
     static std::string nowString();
+
+    static std::vector<uint32_t> buildThumbnail(
+        const Document& doc,
+        int& outWidth,
+        int& outHeight
+    );
 
     void sortEntries();
     void trimToLimit();
