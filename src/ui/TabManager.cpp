@@ -647,8 +647,7 @@ void TabManager::renderHomeTab(ToolManager& toolManager) {
         ImGuiWindowFlags_NoScrollbar);
     
     bool homeInteractionsBlocked =
-        ImGui::IsPopupOpen("Recover Files##home") ||
-        ImGui::IsPopupOpen("Clear Recent Projects##home");
+        ImGui::IsPopupOpen("", ImGuiPopupFlags_AnyPopupId);
 
     float centerX = io.DisplaySize.x * 0.5f;
     float startY  = io.DisplaySize.y * 0.25f - tabBarH;
@@ -1020,7 +1019,8 @@ void TabManager::renderHomeTab(ToolManager& toolManager) {
 
             if (hoveringCardOnly) {
                 if (exists) {
-                    ImGui::SetTooltip("Open %s", entry.name.c_str());
+                    if (!homeInteractionsBlocked)
+                        ImGui::SetTooltip("Open %s", entry.name.c_str());
 
                     if (ImGui::IsMouseClicked(ImGuiMouseButton_Left)) {
                         openPath = entry.path;
