@@ -4,6 +4,7 @@
 #include "ui/ToolsPanel.h"
 #include "ui/PalettePanel.h"
 
+#include <cstdlib>
 #include <imgui.h>
 #include <imgui_internal.h>
 #include <SDL3/SDL.h>
@@ -80,6 +81,16 @@ static std::string fitTextMiddleEllipsis(const std::string& text, float maxWidth
     }
 
     return dots;
+}
+
+static void showFileInFolder(const std::string& path) {
+#if defined(_WIN32)
+    std::string command = "explorer.exe /select,\"" + path + "\"";
+    system(command.c_str());
+#else
+    std::filesystem::path filePath(path);
+    SDL_OpenURL(filePath.parent_path().string().c_str());
+#endif
 }
 
 void TabManager::render(ToolManager& toolManager) {
@@ -552,6 +563,7 @@ void TabManager::renderHomeTab(ToolManager& toolManager) {
         std::string openPath;
         std::string pinPath;
         std::string removePath;
+        std::string showInFolderPath;
 
         for (int i = 0; i < static_cast<int>(recent.size()); ++i) {
             const auto& entry = recent[i];
@@ -765,6 +777,18 @@ void TabManager::renderHomeTab(ToolManager& toolManager) {
 
             removeButtonHovered = ImGui::IsItemHovered();
 
+            ImGui::SameLine();
+
+            if (ImGui::SmallButton("Show")) {
+                showInFolderPath = entry.path;
+            }
+
+            bool folderButtonHovered = ImGui::IsItemHovered();
+
+            if (folderButtonHovered) {
+                ImGui::SetTooltip("Show in folder");
+            }
+
             ImGui::EndGroup();
 
             bool hoveringCardOnly =
@@ -776,7 +800,8 @@ void TabManager::renderHomeTab(ToolManager& toolManager) {
                 !missingTextHovered &&
                 !openButtonHovered &&
                 !pinButtonHovered &&
-                !removeButtonHovered;
+                !removeButtonHovered &&
+                !folderButtonHovered;
 
             if (hoveringCardOnly) {
                 if (exists) {
@@ -823,6 +848,9 @@ void TabManager::renderHomeTab(ToolManager& toolManager) {
         }
         else if (!removePath.empty()) {
             m_recentFiles.removePath(removePath);
+        }
+        else if (!showInFolderPath.empty()) {
+            showFileInFolder(showInFolderPath);
         }
     }
 
