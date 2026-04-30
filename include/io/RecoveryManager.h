@@ -3,6 +3,7 @@
 #include "core/DocumentTab.h"
 
 #include <string>
+#include <cstdint>
 #include <vector>
 
 namespace Framenote {
@@ -18,6 +19,17 @@ struct RecoveryEntry {
     int canvasHeight = 0;
     int fps          = 0;
     int frameCount   = 0;
+
+    int thumbnailWidth  = 0;
+    int thumbnailHeight = 0;
+    std::vector<uint32_t> thumbnailPixels;
+
+    bool hasThumbnail() const {
+        return thumbnailWidth > 0 &&
+               thumbnailHeight > 0 &&
+               thumbnailPixels.size() ==
+                   static_cast<size_t>(thumbnailWidth * thumbnailHeight);
+    }
 };
 
 class RecoveryManager {
@@ -55,6 +67,12 @@ private:
     void pruneMissingFiles();
 
     std::vector<RecoveryEntry> m_entries;
+
+    static std::vector<uint32_t> buildThumbnail(
+        const Document& doc,
+        int& outWidth,
+        int& outHeight
+    );
 };
 
 } // namespace Framenote

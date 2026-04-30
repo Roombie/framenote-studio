@@ -124,6 +124,102 @@ static void drawRecentThumbnail(
     );
 }
 
+static void drawRecoveryThumbnail(
+    ImDrawList* dl,
+    const RecoveryEntry& entry,
+    ImVec2 thumbPos,
+    ImVec2 thumbSize
+) {
+    ImVec2 thumbMax = {
+        thumbPos.x + thumbSize.x,
+        thumbPos.y + thumbSize.y
+    };
+
+    dl->AddRectFilled(
+        thumbPos,
+        thumbMax,
+        IM_COL32(35, 35, 42, 255),
+        5.0f
+    );
+
+    float checkerSize = 6.0f;
+
+    for (float y = thumbPos.y; y < thumbMax.y; y += checkerSize) {
+        for (float x = thumbPos.x; x < thumbMax.x; x += checkerSize) {
+            int cx = static_cast<int>((x - thumbPos.x) / checkerSize);
+            int cy = static_cast<int>((y - thumbPos.y) / checkerSize);
+
+            bool light = ((cx + cy) % 2) == 0;
+
+            ImU32 checkerColor = light
+                ? IM_COL32(80, 80, 85, 255)
+                : IM_COL32(55, 55, 60, 255);
+
+            dl->AddRectFilled(
+                {x, y},
+                {
+                    std::min(x + checkerSize, thumbMax.x),
+                    std::min(y + checkerSize, thumbMax.y)
+                },
+                checkerColor
+            );
+        }
+    }
+
+    if (entry.hasThumbnail()) {
+        float pixelW = thumbSize.x / static_cast<float>(entry.thumbnailWidth);
+        float pixelH = thumbSize.y / static_cast<float>(entry.thumbnailHeight);
+
+        for (int py = 0; py < entry.thumbnailHeight; ++py) {
+            for (int px = 0; px < entry.thumbnailWidth; ++px) {
+                uint32_t argb =
+                    entry.thumbnailPixels[py * entry.thumbnailWidth + px];
+
+                uint8_t a = static_cast<uint8_t>((argb >> 24) & 0xFF);
+                uint8_t r = static_cast<uint8_t>((argb >> 16) & 0xFF);
+                uint8_t g = static_cast<uint8_t>((argb >> 8) & 0xFF);
+                uint8_t b = static_cast<uint8_t>(argb & 0xFF);
+
+                if (a == 0)
+                    continue;
+
+                float x0 = thumbPos.x + px * pixelW;
+                float y0 = thumbPos.y + py * pixelH;
+                float x1 = thumbPos.x + (px + 1) * pixelW;
+                float y1 = thumbPos.y + (py + 1) * pixelH;
+
+                dl->AddRectFilled(
+                    {x0, y0},
+                    {x1, y1},
+                    IM_COL32(r, g, b, a)
+                );
+            }
+        }
+    }
+    else {
+        const char* label = "REC";
+        ImVec2 textSize = ImGui::CalcTextSize(label);
+
+        dl->AddText(
+            {
+                thumbPos.x + (thumbSize.x - textSize.x) * 0.5f,
+                thumbPos.y + (thumbSize.y - textSize.y) * 0.5f
+            },
+            IM_COL32(220, 220, 230, 255),
+            label
+        );
+    }
+
+    dl->AddRect(
+        thumbPos,
+        thumbMax,
+        IM_COL32(95, 98, 115, 255),
+        5.0f,
+        0,
+        1.5f
+    );
+}
+
 static std::string fitTextMiddleEllipsis(const std::string& text, float maxWidth) {
     if (text.empty())
         return text;
@@ -534,6 +630,10 @@ void TabManager::renderHomeTab(ToolManager& toolManager) {
         ImGuiWindowFlags_NoSavedSettings |
         ImGuiWindowFlags_NoBringToFrontOnFocus |
         ImGuiWindowFlags_NoScrollbar);
+    
+    bool homeInteractionsBlocked =
+        ImGui::IsPopupOpen("Recover Files##home") ||
+        ImGui::IsPopupOpen("Clear Recent Projects##home");
 
     float centerX = io.DisplaySize.x * 0.5f;
     float startY  = io.DisplaySize.y * 0.25f - tabBarH;
@@ -583,18 +683,8 @@ void TabManager::renderHomeTab(ToolManager& toolManager) {
         }
     }
 
-    ImGui::SetCursorPos({centerX - 120, startY + 190});
-
-    ImGui::BeginDisabled(!m_recoveryManager.hasEntries());
-
-    if (ImGui::Button("  Recover Files...  ", {240, 34})) {
-        m_showRecoverDialog = true;
-    }
-
-    ImGui::EndDisabled();
-
     float recentX = centerX - 300.0f;
-    float recentY = startY + 245.0f;
+    float recentY = startY + 210.0f;
     float recentW = 600.0f;
 
     float footerReservedH = 95.0f;
@@ -611,6 +701,23 @@ void TabManager::renderHomeTab(ToolManager& toolManager) {
     ImGui::Text("Recent Projects");
 
     ImGui::SameLine();
+
+    int recoveryCount = static_cast<int>(m_recoveryManager.entries().size());
+
+    if (recoveryCount > 0) {
+        std::string recoverButtonLabel =
+            "Recover (" + std::to_string(recoveryCount) + ")";
+
+        if (ImGui::SmallButton(recoverButtonLabel.c_str())) {
+            m_showRecoverDialog = true;
+        }
+
+        if (ImGui::IsItemHovered()) {
+            ImGui::SetTooltip("Open autosaved recovery files");
+        }
+
+        ImGui::SameLine();
+    }
 
     bool showThumbs = m_recentFiles.showThumbnails();
 
@@ -697,7 +804,9 @@ void TabManager::renderHomeTab(ToolManager& toolManager) {
             ImVec2 cardMin = ImGui::GetCursorScreenPos();
             ImVec2 cardMax = {cardMin.x + cardW, cardMin.y + cardH};
 
-            bool cardHovered = ImGui::IsMouseHoveringRect(cardMin, cardMax, true);
+            bool cardHovered =
+                !homeInteractionsBlocked &&
+                ImGui::IsMouseHoveringRect(cardMin, cardMax, true);
 
             ImU32 bgColor = exists
                 ? IM_COL32(28, 28, 31, 255)
@@ -874,6 +983,7 @@ void TabManager::renderHomeTab(ToolManager& toolManager) {
             ImGui::EndGroup();
 
             bool hoveringCardOnly =
+                !homeInteractionsBlocked &&
                 cardHovered &&
                 !titleHovered &&
                 !metadataHovered &&
@@ -1011,6 +1121,18 @@ void TabManager::renderHomeTab(ToolManager& toolManager) {
 
                 ImGui::PushID(i);
 
+                ImDrawList* dl = ImGui::GetWindowDrawList();
+
+                ImVec2 thumbPos = ImGui::GetCursorScreenPos();
+                ImVec2 thumbSize = {48.0f, 48.0f};
+
+                drawRecoveryThumbnail(dl, entry, thumbPos, thumbSize);
+
+                ImGui::Dummy(thumbSize);
+                ImGui::SameLine();
+
+                ImGui::BeginGroup();
+
                 ImGui::Text("%s", entry.displayName.c_str());
 
                 if (entry.canvasWidth > 0 && entry.canvasHeight > 0) {
@@ -1044,6 +1166,8 @@ void TabManager::renderHomeTab(ToolManager& toolManager) {
                 if (ImGui::SmallButton("Remove")) {
                     removeRecoveryId = entry.id;
                 }
+
+                ImGui::EndGroup();
 
                 ImGui::Separator();
 
@@ -1115,7 +1239,7 @@ void TabManager::renderHomeTab(ToolManager& toolManager) {
 
         ImGui::EndDisabled();
 
-        ImGui::SameLine();
+        ImGui::SameLine(0.0f, 12.0f);
 
         if (ImGui::Button("Close", {90, 0})) {
             ImGui::CloseCurrentPopup();
