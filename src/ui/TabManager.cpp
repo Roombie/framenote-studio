@@ -474,7 +474,8 @@ void TabManager::renderHomeTab(ToolManager& toolManager) {
                 }
             }
 
-            if (!m_recentFiles.showPaths() && ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled)) {
+            if (!m_recentFiles.showPaths() &&
+                ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled)) {
                 ImGui::SetTooltip("%s", entry.path.c_str());
             }
 
