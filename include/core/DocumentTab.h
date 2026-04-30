@@ -39,6 +39,11 @@ struct DocumentTab {
     bool paletteGestureStartedOnSelected = false;
     int  paletteGestureStartIndex = -1;
 
+    // Recovery/autosave state — persisted only during the app session
+    std::string recoveryId;
+    std::string recoveryPath;
+    double lastAutosaveTime = 0.0;
+
     static std::unique_ptr<DocumentTab> createBlank(
         SDL_Renderer* sdlRenderer,
         const std::string& name = "untitled",

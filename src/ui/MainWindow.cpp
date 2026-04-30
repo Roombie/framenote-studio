@@ -57,6 +57,7 @@ MainWindow::MainWindow(TabManager* tabManager, ToolManager* toolManager)
 void MainWindow::render() {
     renderMenuBar();
     m_tabManager->render(*m_toolManager);
+    m_tabManager->autosaveDirtyTabs(ImGui::GetTime());
     renderCanvasSizeDialog();
     renderExportDialog();
     renderOnionOpacityDialog();

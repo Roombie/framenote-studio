@@ -47,6 +47,7 @@ set(SOURCES
     src/io/PngExporter.cpp
     src/io/FileDialog.cpp
     src/io/RecentFiles.cpp
+    src/io/RecoveryManager.cpp
 
     # Dear ImGui (vendored)
     third_party/imgui/imgui.cpp

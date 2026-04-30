@@ -9,6 +9,7 @@
 #include "tools/ToolManager.h"
 #include "ui/IconLoader.h"
 #include "io/RecentFiles.h"
+#include "io/RecoveryManager.h"
 
 namespace Framenote {
 
@@ -36,6 +37,10 @@ public:
     
     void recordRecentFile(const std::string& path, const Document& doc);
 
+    void autosaveDirtyTabs(double nowSeconds);
+    void clearRecoveryForActiveTab();
+    void clearRecoveryForPath(const std::string& path);
+
 private:
     void renderHomeTab(ToolManager& toolManager);
     void renderDocumentTab(DocumentTab& tab, ToolManager& toolManager);
@@ -58,6 +63,11 @@ private:
 
     RecentFiles m_recentFiles;
     std::string m_homeStatusMsg;
+
+    RecoveryManager m_recoveryManager;
+
+    bool m_showRecoverDialog = false;
+    std::string m_recoverStatusMsg;
 };
 
 } // namespace Framenote
