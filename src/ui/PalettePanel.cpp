@@ -6,6 +6,8 @@
 #include <cstdint>
 #include <cmath>
 #include <string>
+#include <utility>
+#include <vector>
 
 namespace Framenote {
 
@@ -30,6 +32,40 @@ static Color fromFloatColor(const float values[4]) {
         toByte(values[2]),
         toByte(values[3])
     };
+}
+
+static float safePanelWidth(float minWidth = 80.0f) {
+    return std::max(minWidth, ImGui::GetContentRegionAvail().x - 18.0f);
+}
+
+static bool containsIndex(const std::vector<int>& values, int index) {
+    return std::find(values.begin(), values.end(), index) != values.end();
+}
+
+static void addIndexUnique(std::vector<int>& values, int index) {
+    if (!containsIndex(values, index)) {
+        values.push_back(index);
+    }
+}
+
+static void normalizeSelection(std::vector<int>& values, int paletteSize) {
+    values.erase(
+        std::remove_if(
+            values.begin(),
+            values.end(),
+            [paletteSize](int idx) {
+                return idx < 0 || idx >= paletteSize;
+            }
+        ),
+        values.end()
+    );
+
+    std::sort(values.begin(), values.end());
+
+    values.erase(
+        std::unique(values.begin(), values.end()),
+        values.end()
+    );
 }
 
 static Color mixColor(Color a, Color b, float t) {
@@ -102,20 +138,17 @@ static void applyLabColor(
         ? palette.secondaryIndex()
         : palette.primaryIndex();
 
-    // Left-click applies to whichever color slot is currently active.
     if (ImGui::IsItemClicked(ImGuiMouseButton_Left)) {
         palette.color(activeIndex) = color;
         document->markDirty();
     }
 
-    // Right-click always applies to Secondary and makes Secondary active.
     if (ImGui::IsItemClicked(ImGuiMouseButton_Right)) {
         palette.color(palette.secondaryIndex()) = color;
         editingSecondary = true;
         document->markDirty();
     }
 
-    // Middle-click adds as a new palette color.
     if (ImGui::IsItemClicked(ImGuiMouseButton_Middle)) {
         palette.addColor(color);
         document->markDirty();
@@ -233,9 +266,22 @@ static void renderColorRampSuggestions(
     drawLabSwatch("Outline", outline, palette, document, editingSecondary);
 }
 
-PalettePanel::PalettePanel(Document* document, bool& editingSecondary)
+PalettePanel::PalettePanel(
+    Document* document,
+    bool& editingSecondary,
+    std::vector<int>& selection,
+    bool& gestureActive,
+    bool& gestureSelecting,
+    bool& gestureStartedOnSelected,
+    int& gestureStartIndex
+)
     : m_document(document)
     , m_editingSecondary(editingSecondary)
+    , m_selection(selection)
+    , m_gestureActive(gestureActive)
+    , m_gestureSelecting(gestureSelecting)
+    , m_gestureStartedOnSelected(gestureStartedOnSelected)
+    , m_gestureStartIndex(gestureStartIndex)
 {}
 
 void PalettePanel::render() {
@@ -402,7 +448,17 @@ void PalettePanel::renderColorSlots(Palette& palette) {
 }
 
 void PalettePanel::renderSwatchGrid(Palette& palette) {
-    float availW      = ImGui::GetContentRegionAvail().x;
+    normalizeSelection(m_selection, palette.size());
+
+    if (ImGui::IsKeyPressed(ImGuiKey_Escape, false)) {
+        m_selection.clear();
+        m_gestureActive = false;
+        m_gestureSelecting = false;
+        m_gestureStartedOnSelected = false;
+        m_gestureStartIndex = -1;
+    }
+
+    float availW      = safePanelWidth(80.0f);
     float itemSpacing = ImGui::GetStyle().ItemSpacing.x;
 
     int cols = static_cast<int>((availW + itemSpacing) / (SWATCH_SIZE + itemSpacing));
@@ -412,8 +468,9 @@ void PalettePanel::renderSwatchGrid(Palette& palette) {
 
     int deleteIndex = -1;
 
-    int moveFrom = -1;
-    int moveTo   = -1;
+    std::vector<int> deleteGroup;
+    std::vector<int> moveGroup;
+    int moveTo = -1;
 
     ImDrawList* dl = ImGui::GetWindowDrawList();
 
@@ -422,6 +479,8 @@ void PalettePanel::renderSwatchGrid(Palette& palette) {
     for (int i = 0; i < palette.size(); ++i) {
         Color col = palette.color(i);
         ImVec4 swatchColor = toImVec4(col);
+
+        bool wasSelectedBeforeInput = containsIndex(m_selection, i);
 
         ImGui::PushID(i);
 
@@ -436,8 +495,22 @@ void PalettePanel::renderSwatchGrid(Palette& palette) {
         ImVec2 min = ImGui::GetItemRectMin();
         ImVec2 max = ImGui::GetItemRectMax();
 
+        bool mouseOverSwatch = ImGui::IsMouseHoveringRect(min, max, true);
+
         bool isPrimary   = i == palette.primaryIndex();
         bool isSecondary = i == palette.secondaryIndex();
+        bool isSelected  = containsIndex(m_selection, i);
+
+        if (isSelected) {
+            dl->AddRect(
+                {min.x - 1.0f, min.y - 1.0f},
+                {max.x + 1.0f, max.y + 1.0f},
+                IM_COL32(255, 210, 80, 255),
+                2.0f,
+                0,
+                2.0f
+            );
+        }
 
         if (isPrimary) {
             dl->AddRect(
@@ -464,28 +537,96 @@ void PalettePanel::renderSwatchGrid(Palette& palette) {
         if (ImGui::IsItemClicked(ImGuiMouseButton_Left)) {
             palette.selectPrimaryIndex(i);
             m_editingSecondary = false;
+
+            m_gestureActive = true;
+            m_gestureSelecting = false;
+            m_gestureStartedOnSelected = wasSelectedBeforeInput;
+            m_gestureStartIndex = i;
+
+            if (!wasSelectedBeforeInput) {
+                m_selection.clear();
+                m_selection.push_back(i);
+            }
         }
 
         if (ImGui::IsItemClicked(ImGuiMouseButton_Right) && !ImGui::GetIO().KeyShift) {
             palette.selectSecondaryIndex(i);
             m_editingSecondary = true;
+
+            m_selection.clear();
+            m_selection.push_back(i);
+
+            m_gestureActive = false;
+            m_gestureSelecting = false;
+            m_gestureStartedOnSelected = false;
+            m_gestureStartIndex = -1;
         }
 
-        if (ImGui::BeginDragDropSource(ImGuiDragDropFlags_SourceAllowNullID)) {
+        if (mouseOverSwatch &&
+            m_gestureActive &&
+            !m_gestureStartedOnSelected &&
+            ImGui::IsMouseDown(ImGuiMouseButton_Left) &&
+            ImGui::IsMouseDragging(ImGuiMouseButton_Left, 2.0f)) {
+
+            m_gestureSelecting = true;
+
+            if (m_gestureStartIndex >= 0) {
+                addIndexUnique(m_selection, m_gestureStartIndex);
+            }
+
+            addIndexUnique(m_selection, i);
+        }
+
+        bool canDragGroup =
+            containsIndex(m_selection, i) &&
+            !m_selection.empty() &&
+            (!m_gestureActive || m_gestureStartedOnSelected);
+
+        if (canDragGroup &&
+            ImGui::BeginDragDropSource(ImGuiDragDropFlags_SourceAllowNullID)) {
+            normalizeSelection(m_selection, palette.size());
+
+            std::vector<int> payload = m_selection;
+
+            if (payload.empty()) {
+                payload.push_back(i);
+            }
+
             ImGui::SetDragDropPayload(
-                "FRAMENOTE_PALETTE_COLOR",
-                &i,
-                sizeof(int)
+                "FRAMENOTE_PALETTE_COLORS",
+                payload.data(),
+                static_cast<int>(payload.size() * sizeof(int))
             );
 
-            ImGui::Text("Move color %d", i);
+            if (payload.size() == 1) {
+                ImGui::Text("Move 1 color");
+            }
+            else {
+                ImGui::Text("Move %d colors", static_cast<int>(payload.size()));
+            }
 
-            ImGui::ColorButton(
-                "##drag-preview",
-                swatchColor,
-                flags,
-                {SWATCH_SIZE, SWATCH_SIZE}
-            );
+            int previewCount = std::min(static_cast<int>(payload.size()), 8);
+
+            for (int p = 0; p < previewCount; ++p) {
+                if (p > 0)
+                    ImGui::SameLine();
+
+                int idx = payload[p];
+
+                if (idx >= 0 && idx < palette.size()) {
+                    ImGui::ColorButton(
+                        ("##drag-preview" + std::to_string(p)).c_str(),
+                        toImVec4(palette.color(idx)),
+                        flags,
+                        {SWATCH_SIZE, SWATCH_SIZE}
+                    );
+                }
+            }
+
+            if (payload.size() > 8) {
+                ImGui::SameLine();
+                ImGui::Text("+%d", static_cast<int>(payload.size()) - 8);
+            }
 
             ImGui::TextDisabled("Drop on another color to reorder");
             ImGui::TextDisabled("Drop on trash to delete");
@@ -495,14 +636,14 @@ void PalettePanel::renderSwatchGrid(Palette& palette) {
 
         if (ImGui::BeginDragDropTarget()) {
             if (const ImGuiPayload* payload =
-                    ImGui::AcceptDragDropPayload("FRAMENOTE_PALETTE_COLOR")) {
-                IM_ASSERT(payload->DataSize == sizeof(int));
+                    ImGui::AcceptDragDropPayload("FRAMENOTE_PALETTE_COLORS")) {
+                int count = payload->DataSize / static_cast<int>(sizeof(int));
 
-                int from = *static_cast<const int*>(payload->Data);
+                if (count > 0) {
+                    const int* data = static_cast<const int*>(payload->Data);
 
-                if (from != i) {
-                    moveFrom = from;
-                    moveTo   = i;
+                    moveGroup.assign(data, data + count);
+                    moveTo = i;
                 }
             }
 
@@ -511,7 +652,7 @@ void PalettePanel::renderSwatchGrid(Palette& palette) {
 
         if (ImGui::IsItemHovered()) {
             ImGui::SetTooltip(
-                "Color %d\n#%02X%02X%02X%02X\nLeft-click: primary\nRight-click: secondary\nDrag: reorder/delete\nShift + right-click: menu",
+                "Color %d\n#%02X%02X%02X%02X\nLeft-click: primary\nRight-click: secondary\nDrag across: select multiple\nDrag selected: reorder/delete\nShift + right-click: menu",
                 i,
                 col.r,
                 col.g,
@@ -528,11 +669,17 @@ void PalettePanel::renderSwatchGrid(Palette& palette) {
             if (ImGui::MenuItem("Set as Primary")) {
                 palette.selectPrimaryIndex(i);
                 m_editingSecondary = false;
+
+                m_selection.clear();
+                m_selection.push_back(i);
             }
 
             if (ImGui::MenuItem("Set as Secondary")) {
                 palette.selectSecondaryIndex(i);
                 m_editingSecondary = true;
+
+                m_selection.clear();
+                m_selection.push_back(i);
             }
 
             if (ImGui::MenuItem("Duplicate")) {
@@ -542,10 +689,24 @@ void PalettePanel::renderSwatchGrid(Palette& palette) {
 
             ImGui::Separator();
 
-            bool canDelete = palette.size() > 1;
+            bool selectedGroupContainsThis =
+                containsIndex(m_selection, i) &&
+                m_selection.size() > 1;
 
-            if (ImGui::MenuItem("Delete", nullptr, false, canDelete)) {
-                deleteIndex = i;
+            if (selectedGroupContainsThis) {
+                bool canDeleteGroup =
+                    palette.size() > static_cast<int>(m_selection.size());
+
+                if (ImGui::MenuItem("Delete Selected", nullptr, false, canDeleteGroup)) {
+                    deleteGroup = m_selection;
+                }
+            }
+            else {
+                bool canDelete = palette.size() > 1;
+
+                if (ImGui::MenuItem("Delete", nullptr, false, canDelete)) {
+                    deleteIndex = i;
+                }
             }
 
             ImGui::EndPopup();
@@ -568,6 +729,9 @@ void PalettePanel::renderSwatchGrid(Palette& palette) {
         palette.selectPrimaryIndex(newIdx);
         m_editingSecondary = false;
 
+        m_selection.clear();
+        m_selection.push_back(newIdx);
+
         m_document->markDirty();
     }
 
@@ -577,14 +741,41 @@ void PalettePanel::renderSwatchGrid(Palette& palette) {
 
     ImGui::Unindent(4.0f);
 
+    if (m_gestureActive && ImGui::IsMouseReleased(ImGuiMouseButton_Left)) {
+        m_gestureActive = false;
+        m_gestureSelecting = false;
+        m_gestureStartedOnSelected = false;
+        m_gestureStartIndex = -1;
+
+        normalizeSelection(m_selection, palette.size());
+    }
+
     ImGui::Spacing();
+
+    if (!m_selection.empty()) {
+        if (m_selection.size() == 1) {
+            ImGui::TextDisabled("1 color selected");
+        }
+        else {
+            ImGui::TextDisabled(
+                "%d colors selected",
+                static_cast<int>(m_selection.size())
+            );
+        }
+
+        ImGui::SameLine();
+
+        if (ImGui::SmallButton("Clear##palette-selection")) {
+            m_selection.clear();
+        }
+    }
 
     bool canDelete = palette.size() > 1;
 
     ImGui::BeginDisabled(!canDelete);
 
     ImVec2 trashSize = {
-        ImGui::GetContentRegionAvail().x,
+        safePanelWidth(120.0f),
         30.0f
     };
 
@@ -595,13 +786,12 @@ void PalettePanel::renderSwatchGrid(Palette& palette) {
 
     if (ImGui::BeginDragDropTarget()) {
         if (const ImGuiPayload* payload =
-                ImGui::AcceptDragDropPayload("FRAMENOTE_PALETTE_COLOR")) {
-            IM_ASSERT(payload->DataSize == sizeof(int));
+                ImGui::AcceptDragDropPayload("FRAMENOTE_PALETTE_COLORS")) {
+            int count = payload->DataSize / static_cast<int>(sizeof(int));
 
-            int from = *static_cast<const int*>(payload->Data);
-
-            if (canDelete) {
-                deleteIndex = from;
+            if (count > 0) {
+                const int* data = static_cast<const int*>(payload->Data);
+                deleteGroup.assign(data, data + count);
             }
         }
 
@@ -609,7 +799,7 @@ void PalettePanel::renderSwatchGrid(Palette& palette) {
     }
 
     if (ImGui::IsItemHovered()) {
-        ImGui::SetTooltip("Drag a palette color here to delete it");
+        ImGui::SetTooltip("Drag selected palette color(s) here to delete");
     }
 
     ImGui::EndDisabled();
@@ -623,13 +813,42 @@ void PalettePanel::renderSwatchGrid(Palette& palette) {
         1.5f
     );
 
-    if (moveFrom >= 0 && moveTo >= 0 && moveFrom != moveTo) {
-        palette.moveColor(moveFrom, moveTo);
+    if (!moveGroup.empty() && moveTo >= 0) {
+        std::vector<int> newSelection = palette.moveColors(moveGroup, moveTo);
+
+        m_selection = std::move(newSelection);
+
+        m_gestureActive = false;
+        m_gestureSelecting = false;
+        m_gestureStartedOnSelected = false;
+        m_gestureStartIndex = -1;
+
+        m_document->markDirty();
+    }
+
+    if (!deleteGroup.empty() && palette.size() > 1) {
+        palette.removeColors(deleteGroup);
+
+        m_selection.clear();
+
+        m_gestureActive = false;
+        m_gestureSelecting = false;
+        m_gestureStartedOnSelected = false;
+        m_gestureStartIndex = -1;
+
         m_document->markDirty();
     }
 
     if (deleteIndex >= 0 && palette.size() > 1) {
         palette.removeColor(deleteIndex);
+
+        m_selection.clear();
+
+        m_gestureActive = false;
+        m_gestureSelecting = false;
+        m_gestureStartedOnSelected = false;
+        m_gestureStartIndex = -1;
+
         m_document->markDirty();
     }
 }
@@ -713,7 +932,7 @@ void PalettePanel::renderColorChooser(Palette& palette) {
             : "Editing: Primary"
     );
 
-    float availW = ImGui::GetContentRegionAvail().x;
+    float availW = safePanelWidth(80.0f);
     float pickerW = availW;
 
     if (pickerW > 220.0f)
@@ -811,7 +1030,7 @@ void PalettePanel::renderColorChooser(Palette& palette) {
 
     ImGui::Text("Primary");
 
-    ImGui::PushItemWidth(ImGui::GetContentRegionAvail().x);
+    ImGui::PushItemWidth(safePanelWidth(80.0f));
 
     if (ImGui::ColorEdit4("##primary-edit", primaryEdit, editFlags)) {
         primary = fromFloatColor(primaryEdit);
@@ -825,7 +1044,7 @@ void PalettePanel::renderColorChooser(Palette& palette) {
 
     ImGui::Text("Secondary");
 
-    ImGui::PushItemWidth(ImGui::GetContentRegionAvail().x);
+    ImGui::PushItemWidth(safePanelWidth(80.0f));
 
     if (ImGui::ColorEdit4("##secondary-edit", secondaryEdit, editFlags)) {
         secondary = fromFloatColor(secondaryEdit);
@@ -843,8 +1062,12 @@ void PalettePanel::renderToolbar(Palette& palette) {
     ImGui::Separator();
     ImGui::Spacing();
 
-    float btnW = (ImGui::GetContentRegionAvail().x -
-                  ImGui::GetStyle().ItemSpacing.x * 2) / 3.0f;
+    float safeW = safePanelWidth(140.0f);
+    float spacing = ImGui::GetStyle().ItemSpacing.x;
+    float btnW = (safeW - spacing * 2.0f) / 3.0f;
+
+    if (btnW < 44.0f)
+        btnW = 44.0f;
 
     if (ImGui::Button("Load##palette", {btnW, 0})) {
         std::string path = FileDialog::openFile(

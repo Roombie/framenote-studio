@@ -1,5 +1,6 @@
 #include "core/Palette.h"
 
+#include <vector>
 #include <algorithm>
 #include <fstream>
 #include <sstream>
@@ -16,45 +17,199 @@ void Palette::addColor(Color c) {
 }
 
 void Palette::moveColor(int fromIndex, int toIndex) {
-    if (m_colors.empty())
-        return;
-
-    fromIndex = clamp(fromIndex);
-    toIndex   = clamp(toIndex);
-
-    if (fromIndex == toIndex)
-        return;
-
-    Color moved = m_colors[fromIndex];
-
-    m_colors.erase(m_colors.begin() + fromIndex);
-    m_colors.insert(m_colors.begin() + toIndex, moved);
-
-    auto remapIndex = [fromIndex, toIndex](int idx) {
-        if (idx == fromIndex)
-            return toIndex;
-
-        if (fromIndex < toIndex) {
-            if (idx > fromIndex && idx <= toIndex)
-                return idx - 1;
-        }
-        else {
-            if (idx >= toIndex && idx < fromIndex)
-                return idx + 1;
-        }
-
-        return idx;
-    };
-
-    m_selectedIndex  = clamp(remapIndex(m_selectedIndex));
-    m_secondaryIndex = clamp(remapIndex(m_secondaryIndex));
+    moveColors(std::vector<int>{fromIndex}, toIndex);
 }
 
 void Palette::removeColor(int index) {
-    if (m_colors.size() <= 1) return;  // always keep at least one
-    m_colors.erase(m_colors.begin() + index);
-    m_selectedIndex = clamp(m_selectedIndex);
-    m_secondaryIndex = clamp(m_secondaryIndex);
+    removeColors(std::vector<int>{index});
+}
+
+static std::vector<int> normalizeIndices(std::vector<int> indices, int size) {
+    indices.erase(
+        std::remove_if(
+            indices.begin(),
+            indices.end(),
+            [size](int idx) {
+                return idx < 0 || idx >= size;
+            }
+        ),
+        indices.end()
+    );
+
+    std::sort(indices.begin(), indices.end());
+
+    indices.erase(
+        std::unique(indices.begin(), indices.end()),
+        indices.end()
+    );
+
+    return indices;
+}
+
+std::vector<int> Palette::moveColors(const std::vector<int>& indices, int toIndex) {
+    if (m_colors.empty())
+        return {};
+
+    std::vector<int> selected = normalizeIndices(indices, size());
+
+    if (selected.empty())
+        return {};
+
+    toIndex = clamp(toIndex);
+
+    if (std::find(selected.begin(), selected.end(), toIndex) != selected.end()) {
+        return selected;
+    }
+
+    std::vector<Color> oldColors = m_colors;
+    std::vector<int> oldToNew(oldColors.size(), -1);
+
+    std::vector<Color> moving;
+    moving.reserve(selected.size());
+
+    for (int idx : selected) {
+        moving.push_back(oldColors[idx]);
+    }
+
+    int removedBeforeTarget = 0;
+
+    for (int idx : selected) {
+        if (idx < toIndex)
+            removedBeforeTarget++;
+    }
+
+    int insertAt = toIndex - removedBeforeTarget;
+    int remainingCount = static_cast<int>(oldColors.size() - selected.size());
+
+    if (insertAt < 0)
+        insertAt = 0;
+
+    if (insertAt > remainingCount)
+        insertAt = remainingCount;
+
+    std::vector<Color> newColors;
+    newColors.reserve(oldColors.size());
+
+    std::vector<int> movedNewIndices;
+    movedNewIndices.reserve(selected.size());
+
+    bool insertedMoving = false;
+    int keptSeen = 0;
+
+    auto appendMoving = [&]() {
+        if (insertedMoving)
+            return;
+
+        insertedMoving = true;
+
+        for (int i = 0; i < static_cast<int>(selected.size()); ++i) {
+            int oldIdx = selected[i];
+
+            oldToNew[oldIdx] = static_cast<int>(newColors.size());
+            movedNewIndices.push_back(oldToNew[oldIdx]);
+
+            newColors.push_back(oldColors[oldIdx]);
+        }
+    };
+
+    for (int oldIdx = 0; oldIdx < static_cast<int>(oldColors.size()); ++oldIdx) {
+        bool isMoving =
+            std::binary_search(selected.begin(), selected.end(), oldIdx);
+
+        if (isMoving)
+            continue;
+
+        if (keptSeen == insertAt) {
+            appendMoving();
+        }
+
+        oldToNew[oldIdx] = static_cast<int>(newColors.size());
+        newColors.push_back(oldColors[oldIdx]);
+        keptSeen++;
+    }
+
+    appendMoving();
+
+    int oldPrimary = m_selectedIndex;
+    int oldSecondary = m_secondaryIndex;
+
+    m_colors = std::move(newColors);
+
+    if (oldPrimary >= 0 &&
+        oldPrimary < static_cast<int>(oldToNew.size()) &&
+        oldToNew[oldPrimary] >= 0) {
+        m_selectedIndex = clamp(oldToNew[oldPrimary]);
+    }
+    else {
+        m_selectedIndex = clamp(m_selectedIndex);
+    }
+
+    if (oldSecondary >= 0 &&
+        oldSecondary < static_cast<int>(oldToNew.size()) &&
+        oldToNew[oldSecondary] >= 0) {
+        m_secondaryIndex = clamp(oldToNew[oldSecondary]);
+    }
+    else {
+        m_secondaryIndex = clamp(m_secondaryIndex);
+    }
+
+    return movedNewIndices;
+}
+
+void Palette::removeColors(const std::vector<int>& indices) {
+    if (m_colors.size() <= 1)
+        return;
+
+    std::vector<int> selected = normalizeIndices(indices, size());
+
+    if (selected.empty())
+        return;
+
+    while (selected.size() >= m_colors.size()) {
+        selected.pop_back();
+    }
+
+    if (selected.empty())
+        return;
+
+    std::vector<Color> oldColors = m_colors;
+    std::vector<int> oldToNew(oldColors.size(), -1);
+
+    std::vector<Color> newColors;
+    newColors.reserve(oldColors.size() - selected.size());
+
+    for (int oldIdx = 0; oldIdx < static_cast<int>(oldColors.size()); ++oldIdx) {
+        bool remove =
+            std::binary_search(selected.begin(), selected.end(), oldIdx);
+
+        if (remove)
+            continue;
+
+        oldToNew[oldIdx] = static_cast<int>(newColors.size());
+        newColors.push_back(oldColors[oldIdx]);
+    }
+
+    if (newColors.empty()) {
+        newColors.push_back({0, 0, 0, 0});
+    }
+
+    int oldPrimary = m_selectedIndex;
+    int oldSecondary = m_secondaryIndex;
+
+    m_colors = std::move(newColors);
+
+    auto remapOrClamp = [&](int oldIndex) {
+        if (oldIndex >= 0 &&
+            oldIndex < static_cast<int>(oldToNew.size()) &&
+            oldToNew[oldIndex] >= 0) {
+            return clamp(oldToNew[oldIndex]);
+        }
+
+        return clamp(oldIndex);
+    };
+
+    m_selectedIndex = remapOrClamp(oldPrimary);
+    m_secondaryIndex = remapOrClamp(oldSecondary);
 }
 
 void Palette::setColors(std::vector<Color> colors) {

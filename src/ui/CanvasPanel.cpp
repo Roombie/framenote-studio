@@ -15,11 +15,15 @@ static float fnClamp(float val, float lo, float hi) {
 CanvasPanel::CanvasPanel(Document* document, Timeline* timeline,
                          ToolManager* toolManager, CanvasRenderer* renderer,
                          float& zoom, float& panX, float& panY,
-                         History& history)
+                         History& history,
+                         bool& strokeActive,
+                         int& strokeFrameIndex)
     : m_document(document), m_timeline(timeline)
     , m_toolManager(toolManager), m_renderer(renderer)
     , m_zoom(zoom), m_panX(panX), m_panY(panY)
     , m_history(history)
+    , m_strokeActive(strokeActive)
+    , m_strokeFrameIndex(strokeFrameIndex)
 {}
 
 void CanvasPanel::render() {
@@ -93,11 +97,17 @@ void CanvasPanel::render() {
     bool rawInCanvas = mp.x >= originX && mp.x < originX + canvasW &&
                     mp.y >= originY && mp.y < originY + canvasH;
 
-    // Only let the Canvas panel control input/cursor when the Canvas window is
-    // actually the hovered window. This prevents it from affecting Timeline,
-    // Palette, Tools, popups, or other docked panels.
-    bool inWindow = canvasWindowHovered && rawInWindow;
-    bool inCanvas = canvasWindowHovered && rawInCanvas;
+    // Only let the Canvas panel start input/cursor control when the Canvas window is
+    // actually hovered. However, once a stroke is active, keep tracking by raw bounds.
+    // This prevents fast pencil/eraser strokes from breaking into dots if ImGui hover
+    // state flickers while dragging.
+    bool inWindow =
+        rawInWindow &&
+        (canvasWindowHovered || m_strokeActive);
+
+    bool inCanvas =
+        rawInCanvas &&
+        (canvasWindowHovered || m_strokeActive);
 
     bool spaceHeld = ImGui::IsKeyDown(ImGuiKey_Space);
     bool ctrlHeld  = io.KeyCtrl;
@@ -121,11 +131,19 @@ void CanvasPanel::render() {
             float ry1 = originY + (py - half + bsize) * m_zoom;
 
             if (activeTool == ToolType::Pencil) {
-                Color c = m_document->palette().selectedColor();
+                Color c =
+                    (io.MouseDown[1] && !io.MouseDown[0])
+                        ? m_document->palette().secondaryColor()
+                        : m_document->palette().primaryColor();
+
                 if (c.a > 0) {
-                    dl->AddRectFilled({rx0, ry0}, {rx1, ry1},
-                        IM_COL32(c.r, c.g, c.b, 255));
+                    dl->AddRectFilled(
+                        {rx0, ry0},
+                        {rx1, ry1},
+                        IM_COL32(c.r, c.g, c.b, 255)
+                    );
                 }
+
                 // Transparent color — outline only, no fill
             }
             // Eraser — outline only, no fill
@@ -275,27 +293,61 @@ void CanvasPanel::render() {
     }
 
     // ── Drawing ───────────────────────────────────────────────────────────────
-    if (inCanvas && !spaceHeld && !io.MouseDown[2] && !popupOpen && !imguiCapturing) {
-        float relX = (mp.x - originX) / canvasW;
-        float relY = (mp.y - originY) / canvasH;
-
-        int px = static_cast<int>(relX * cw);
-        int py = static_cast<int>(relY * ch);
-
-        ToolEvent e;
-        e.canvasX   = static_cast<float>(px);
-        e.canvasY   = static_cast<float>(py);
-        e.leftDown  = io.MouseDown[0];
-        e.rightDown = io.MouseDown[1];
-        e.brushSize = m_toolManager->brushSize();
-
+    // Stroke lifecycle rule:
+    // - Start a stroke when the mouse is down inside the canvas.
+    // - Continue the same stroke while the mouse remains down.
+    // - End the stroke when the mouse is released, drawing becomes invalid, or the cursor leaves the canvas.
+    // - If the user re-enters while still holding, start a new stroke instead of connecting across empty space.
+    {
         Tool* tool = m_toolManager->activeTool();
 
-        if (tool) {
-            int fi = m_timeline->currentFrame();
+        auto makeToolEvent = [&]() {
+            float relX = (mp.x - originX) / canvasW;
+            float relY = (mp.y - originY) / canvasH;
 
-            if (drawingMouseClicked) {
-                // Snapshot current frame state before drawing for undo
+            int px = static_cast<int>(relX * cw);
+            int py = static_cast<int>(relY * ch);
+
+            if (px < 0) px = 0;
+            if (py < 0) py = 0;
+            if (px >= cw) px = cw - 1;
+            if (py >= ch) py = ch - 1;
+
+            ToolEvent e;
+            e.canvasX   = static_cast<float>(px);
+            e.canvasY   = static_cast<float>(py);
+            e.leftDown  = io.MouseDown[0];
+            e.rightDown = io.MouseDown[1];
+            e.brushSize = m_toolManager->brushSize();
+
+            return e;
+        };
+
+        bool canDraw =
+            !spaceHeld &&
+            !io.MouseDown[2] &&
+            !popupOpen &&
+            !imguiCapturing;
+
+        // Use rawInCanvas for drawing continuity. ImGui hover state can flicker during fast mouse motion.
+        if (tool && m_strokeActive && (!drawingMouseDown || !canDraw || !rawInCanvas)) {
+            ToolEvent e = makeToolEvent();
+
+            int releaseFrame = m_strokeFrameIndex >= 0
+                ? m_strokeFrameIndex
+                : m_timeline->currentFrame();
+
+            tool->onRelease(*m_document, releaseFrame, e);
+
+            m_strokeActive = false;
+            m_strokeFrameIndex = -1;
+        }
+
+        if (tool && rawInCanvas && canDraw && drawingMouseDown) {
+            int fi = m_timeline->currentFrame();
+            ToolEvent e = makeToolEvent();
+
+            if (!m_strokeActive) {
                 {
                     auto& f = m_document->frame(fi);
 
@@ -308,14 +360,13 @@ void CanvasPanel::render() {
                     m_history.push(std::move(snap));
                 }
 
+                m_strokeActive = true;
+                m_strokeFrameIndex = fi;
+
                 tool->onPress(*m_document, fi, e);
             }
-            else if (drawingMouseDown) {
+            else {
                 tool->onDrag(*m_document, fi, e);
-            }
-
-            if (drawingMouseReleased) {
-                tool->onRelease(*m_document, fi, e);
             }
         }
     }

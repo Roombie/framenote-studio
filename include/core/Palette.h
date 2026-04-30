@@ -57,7 +57,9 @@ public:
     // Add / remove / reorder / set colors
     void addColor(Color c = {0, 0, 0, 255});
     void removeColor(int index);   // clamps selection if needed
+    void removeColors(const std::vector<int>& indices);
     void moveColor(int fromIndex, int toIndex);
+    std::vector<int> moveColors(const std::vector<int>& indices, int toIndex);
     void setColors(std::vector<Color> colors);
 
     // Persistence

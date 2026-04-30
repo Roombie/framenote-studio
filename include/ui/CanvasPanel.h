@@ -12,13 +12,15 @@ namespace Framenote {
 class CanvasPanel {
 public:
     CanvasPanel(Document*       document,
-                Timeline*       timeline,
-                ToolManager*    toolManager,
-                CanvasRenderer* renderer,
-                float&          zoom,
-                float&          panX,
-                float&          panY,
-                History&        history);
+            Timeline*       timeline,
+            ToolManager*    toolManager,
+            CanvasRenderer* renderer,
+            float&          zoom,
+            float&          panX,
+            float&          panY,
+            History&        history,
+            bool&           strokeActive,
+            int&            strokeFrameIndex);
 
     void render();
 
@@ -34,6 +36,9 @@ private:
     float&   m_panX;
     float&   m_panY;
     History& m_history;
+
+    bool& m_strokeActive;
+    int&  m_strokeFrameIndex;
 };
 
 } // namespace Framenote

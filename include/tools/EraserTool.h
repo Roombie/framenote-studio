@@ -21,6 +21,7 @@ private:
 
     int  m_lastX = -1;
     int  m_lastY = -1;
+    bool m_erasing = false;
 };
 
 } // namespace Framenote
