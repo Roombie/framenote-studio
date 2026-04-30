@@ -3,13 +3,19 @@
 #include "ui/TimelinePanel.h"
 #include "ui/ToolsPanel.h"
 #include "ui/PalettePanel.h"
+
 #include <imgui.h>
 #include <imgui_internal.h>
-#include <cstring>
 #include <SDL3/SDL.h>
+
+#include <algorithm>
+#include <cstring>
+#include <filesystem>
+#include <string>
+#include <vector>
+
 #include "io/FileDialog.h"
 #include "io/FileManager.h"
-#include <filesystem>
 
 namespace Framenote {
 
@@ -330,13 +336,16 @@ void TabManager::renderHomeTab(ToolManager& toolManager) {
                     recordRecentFile(path, *opened->document);
                 }
             }
+            else {
+                m_homeStatusMsg = "Open failed: " + err;
+            }
         }
     }
 
-    float recentX = centerX - 280.0f;
+    float recentX = centerX - 300.0f;
     float recentY = startY + 210.0f;
-    float recentW = 560.0f;
-    float recentH = 230.0f;
+    float recentW = 600.0f;
+    float recentH = 250.0f;
 
     ImGui::SetCursorPos({recentX, recentY});
     ImGui::BeginGroup();
@@ -399,7 +408,9 @@ void TabManager::renderHomeTab(ToolManager& toolManager) {
         ImGui::TextDisabled("(No recent files)");
     }
     else {
-        int removeIndex = -1;
+        std::string openPath;
+        std::string pinPath;
+        std::string removePath;
 
         for (int i = 0; i < static_cast<int>(recent.size()); ++i) {
             const auto& entry = recent[i];
@@ -408,24 +419,67 @@ void TabManager::renderHomeTab(ToolManager& toolManager) {
 
             ImGui::PushID(i);
 
-            if (m_recentFiles.showThumbnails()) {
-                ImDrawList* dl = ImGui::GetWindowDrawList();
+            ImDrawList* dl = ImGui::GetWindowDrawList();
 
+            float cardW = ImGui::GetContentRegionAvail().x - 10.0f;
+            if (cardW < 240.0f)
+                cardW = ImGui::GetContentRegionAvail().x;
+
+            float cardH = m_recentFiles.showPaths() ? 112.0f : 92.0f;
+            if (!exists)
+                cardH += 18.0f;
+
+            ImVec2 cardMin = ImGui::GetCursorScreenPos();
+            ImVec2 cardMax = {cardMin.x + cardW, cardMin.y + cardH};
+
+            bool cardHovered = ImGui::IsMouseHoveringRect(cardMin, cardMax, true);
+
+            ImU32 bgColor = exists
+                ? IM_COL32(28, 28, 31, 255)
+                : IM_COL32(45, 28, 28, 255);
+
+            if (cardHovered && exists)
+                bgColor = IM_COL32(36, 38, 43, 255);
+
+            if (entry.pinned && exists)
+                bgColor = cardHovered
+                    ? IM_COL32(39, 43, 48, 255)
+                    : IM_COL32(32, 34, 39, 255);
+
+            ImU32 borderColor = exists
+                ? IM_COL32(70, 72, 82, 255)
+                : IM_COL32(170, 80, 80, 255);
+
+            if (entry.pinned && exists)
+                borderColor = IM_COL32(44, 184, 213, 210);
+
+            dl->AddRectFilled(cardMin, cardMax, bgColor, 6.0f);
+            dl->AddRect(cardMin, cardMax, borderColor, 6.0f, 0, 1.3f);
+
+            ImGui::SetCursorScreenPos({cardMin.x + 10.0f, cardMin.y + 10.0f});
+
+            float leftTextX = cardMin.x + 12.0f;
+
+            if (m_recentFiles.showThumbnails()) {
                 ImVec2 thumbPos = ImGui::GetCursorScreenPos();
-                ImVec2 thumbSize = {44.0f, 44.0f};
+                ImVec2 thumbSize = {48.0f, 48.0f};
+                ImVec2 thumbMax = {
+                    thumbPos.x + thumbSize.x,
+                    thumbPos.y + thumbSize.y
+                };
 
                 dl->AddRectFilled(
                     thumbPos,
-                    {thumbPos.x + thumbSize.x, thumbPos.y + thumbSize.y},
-                    exists ? IM_COL32(35, 35, 40, 255) : IM_COL32(45, 30, 30, 255),
-                    4.0f
+                    thumbMax,
+                    exists ? IM_COL32(35, 35, 42, 255) : IM_COL32(55, 35, 35, 255),
+                    5.0f
                 );
 
                 dl->AddRect(
                     thumbPos,
-                    {thumbPos.x + thumbSize.x, thumbPos.y + thumbSize.y},
-                    exists ? IM_COL32(90, 90, 105, 255) : IM_COL32(180, 80, 80, 255),
-                    4.0f,
+                    thumbMax,
+                    exists ? IM_COL32(95, 98, 115, 255) : IM_COL32(210, 95, 95, 255),
+                    5.0f,
                     0,
                     1.5f
                 );
@@ -444,34 +498,30 @@ void TabManager::renderHomeTab(ToolManager& toolManager) {
 
                 ImGui::Dummy(thumbSize);
                 ImGui::SameLine();
+
+                leftTextX = thumbMax.x + 12.0f;
             }
 
+            ImGui::SetCursorScreenPos({leftTextX, cardMin.y + 10.0f});
             ImGui::BeginGroup();
 
-            std::string title = entry.pinned ? "★ " + entry.name : entry.name;
+            std::string title = entry.name;
+
+            if (entry.pinned)
+                title = "* " + title;
 
             if (!exists)
                 title += "  (missing)";
 
+            float buttonAreaW = 112.0f;
+            float titleW = cardMax.x - leftTextX - buttonAreaW - 12.0f;
+            if (titleW < 120.0f)
+                titleW = 120.0f;
+
             ImGui::BeginDisabled(!exists);
 
-            if (ImGui::Selectable(title.c_str(), false, 0, {0, 0})) {
-                std::string err;
-                auto doc = FileManager::load(entry.path, err);
-
-                if (doc) {
-                    std::string name = entry.path.substr(entry.path.find_last_of("/\\") + 1);
-                    openDocument(std::move(doc), name, entry.path);
-
-                    if (auto* opened = activeTab()) {
-                        recordRecentFile(entry.path, *opened->document);
-                    }
-
-                    m_homeStatusMsg.clear();
-                }
-                else {
-                    m_homeStatusMsg = "Open failed: " + err;
-                }
+            if (ImGui::Selectable(title.c_str(), false, 0, {titleW, 0})) {
+                openPath = entry.path;
             }
 
             if (!m_recentFiles.showPaths() &&
@@ -507,25 +557,51 @@ void TabManager::renderHomeTab(ToolManager& toolManager) {
                 );
             }
 
-            if (ImGui::SmallButton(entry.pinned ? "Unpin" : "Pin")) {
-                m_recentFiles.togglePinned(entry.path);
-            }
-
-            ImGui::SameLine();
-
-            if (ImGui::SmallButton("Remove")) {
-                removeIndex = i;
-            }
-
             ImGui::EndGroup();
 
-            ImGui::Separator();
+            ImGui::SetCursorScreenPos({cardMax.x - 104.0f, cardMin.y + 10.0f});
+
+            if (ImGui::SmallButton(entry.pinned ? "Unpin" : "Pin")) {
+                pinPath = entry.path;
+            }
+
+            ImGui::SetCursorScreenPos({cardMax.x - 104.0f, cardMin.y + 36.0f});
+
+            if (ImGui::SmallButton("Remove")) {
+                removePath = entry.path;
+            }
+
+            // Move below the card and submit a tiny item so ImGui accepts
+            // the new cursor position as part of the child window layout.
+            ImGui::SetCursorScreenPos({cardMin.x, cardMax.y + 8.0f});
+            ImGui::Dummy({cardW, 1.0f});
 
             ImGui::PopID();
         }
 
-        if (removeIndex >= 0 && removeIndex < static_cast<int>(recent.size())) {
-            m_recentFiles.removePath(recent[removeIndex].path);
+        if (!openPath.empty()) {
+            std::string err;
+            auto doc = FileManager::load(openPath, err);
+
+            if (doc) {
+                std::string name = openPath.substr(openPath.find_last_of("/\\") + 1);
+                openDocument(std::move(doc), name, openPath);
+
+                if (auto* opened = activeTab()) {
+                    recordRecentFile(openPath, *opened->document);
+                }
+
+                m_homeStatusMsg.clear();
+            }
+            else {
+                m_homeStatusMsg = "Open failed: " + err;
+            }
+        }
+        else if (!pinPath.empty()) {
+            m_recentFiles.togglePinned(pinPath);
+        }
+        else if (!removePath.empty()) {
+            m_recentFiles.removePath(removePath);
         }
     }
 
