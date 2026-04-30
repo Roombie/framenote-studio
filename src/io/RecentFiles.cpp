@@ -24,7 +24,7 @@ std::vector<uint32_t> RecentFiles::buildThumbnail(
     int& outWidth,
     int& outHeight
 ) {
-    constexpr int ThumbSize = 16;
+    constexpr int ThumbSize = 32;
 
     outWidth = ThumbSize;
     outHeight = ThumbSize;
