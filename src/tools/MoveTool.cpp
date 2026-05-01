@@ -7,32 +7,127 @@
 
 namespace Framenote {
 
-// ── liftFloat ────────────────────────────────────────────────────────────────
-// Move tool behavior:
-// - Always lift the whole canvas drawing.
-// - Do NOT modify the selection.
-// - The selection/marching ants remain as their original shape and are drawn
-//   translated by the canvas movement offset in CanvasPanel.cpp.
+namespace {
 
-void MoveTool::liftFloat(Document& doc, int frameIndex, const ToolEvent& e) {
-    if (!e.tab) return;
-    if (e.tab->hasFloating) return;
+// Commits any existing floating pixels back into the frame.
+//
+// This is important when switching from SelectionTool -> MoveTool.
+// The SelectionTool can leave selected pixels floating after a selection move.
+// If MoveTool does not commit that first, it will accidentally keep moving only
+// the selected floating region instead of lifting the whole canvas.
+void commitExistingFloatingSelection(Document& doc, int frameIndex, const ToolEvent& e) {
+    if (!e.tab || !e.tab->hasFloating)
+        return;
 
     auto& frame = doc.frame(frameIndex);
 
     int cw = doc.canvasSize().width;
     int ch = doc.canvasSize().height;
 
-    // Move tool moves the whole canvas/layer content.
-    // Important: do NOT call e.selection->selectAll().
+    int fw = e.tab->floatW;
+    int fh = e.tab->floatH;
+    int ox = e.tab->floatOffsetX;
+    int oy = e.tab->floatOffsetY;
+
+    for (int py = 0; py < fh; ++py) {
+        for (int px = 0; px < fw; ++px) {
+            size_t srcIdx = static_cast<size_t>((py * fw + px) * 4);
+
+            uint8_t a = e.tab->floatPixels[srcIdx + 3];
+            if (a == 0)
+                continue;
+
+            int dx = ox + px;
+            int dy = oy + py;
+
+            if (dx < 0 || dy < 0 || dx >= cw || dy >= ch)
+                continue;
+
+            uint32_t col =
+                (static_cast<uint32_t>(e.tab->floatPixels[srcIdx + 3]) << 24) |
+                (static_cast<uint32_t>(e.tab->floatPixels[srcIdx + 2]) << 16) |
+                (static_cast<uint32_t>(e.tab->floatPixels[srcIdx + 1]) <<  8) |
+                (static_cast<uint32_t>(e.tab->floatPixels[srcIdx + 0]));
+
+            frame.setPixel(dx, dy, col);
+        }
+    }
+
+    // Keep the Photoshop/Aseprite behavior:
+    // pixels are committed, but the selection itself remains and follows the moved pixels.
+    if (e.selection && !e.selection->isEmpty()) {
+        int deltaX = e.tab->floatOffsetX - e.tab->floatStartX;
+        int deltaY = e.tab->floatOffsetY - e.tab->floatStartY;
+
+        if (deltaX != 0 || deltaY != 0) {
+            int sw = e.selection->width();
+            int sh = e.selection->height();
+
+            Selection translated(sw, sh);
+
+            for (int y = 0; y < sh; ++y) {
+                for (int x = 0; x < sw; ++x) {
+                    if (!e.selection->isSelected(x, y))
+                        continue;
+
+                    int nx = x + deltaX;
+                    int ny = y + deltaY;
+
+                    if (nx >= 0 && ny >= 0 && nx < sw && ny < sh)
+                        translated.setRect(nx, ny, 1, 1);
+                }
+            }
+
+            *e.selection = std::move(translated);
+        }
+    }
+
+    e.tab->hasFloating = false;
+    e.tab->floatingSource = FloatingSource::None;
+    e.tab->floatPixels.clear();
+    e.tab->floatW = 0;
+    e.tab->floatH = 0;
+    e.tab->floatOffsetX = 0;
+    e.tab->floatOffsetY = 0;
+    e.tab->floatStartX = 0;
+    e.tab->floatStartY = 0;
+
+    doc.markDirty();
+}
+
+} // namespace
+
+// ── liftFloat ────────────────────────────────────────────────────────────────
+// Move tool behavior:
+// - Always move the whole canvas/layer content.
+// - If SelectionTool left a floating selected region active, commit it first.
+// - Do NOT clear the selection.
+// - The selection remains visible and keeps its current position.
+
+void MoveTool::liftFloat(Document& doc, int frameIndex, const ToolEvent& e) {
+    if (!e.tab)
+        return;
+
+    // Fix:
+    // If we came from SelectionTool and it left selected pixels floating,
+    // commit them first so MoveTool can start from a clean whole-canvas state.
+    if (e.tab->hasFloating) {
+        commitExistingFloatingSelection(doc, frameIndex, e);
+    }
+
+    auto& frame = doc.frame(frameIndex);
+
+    int cw = doc.canvasSize().width;
+    int ch = doc.canvasSize().height;
+
     SelectionRect bounds{0, 0, cw, ch};
 
     e.tab->floatW       = bounds.w;
     e.tab->floatH       = bounds.h;
     e.tab->floatOffsetX = 0;
     e.tab->floatOffsetY = 0;
-    e.tab->floatStartX = 0;
-    e.tab->floatStartY = 0;
+    e.tab->floatStartX  = 0;
+    e.tab->floatStartY  = 0;
 
     e.tab->floatPixels.assign(
         static_cast<size_t>(bounds.w * bounds.h * 4),
@@ -57,12 +152,15 @@ void MoveTool::liftFloat(Document& doc, int frameIndex, const ToolEvent& e) {
     }
 
     e.tab->hasFloating = true;
+    e.tab->floatingSource = FloatingSource::CanvasMove;
 }
 
 // ── stampFloat ────────────────────────────────────────────────────────────────
 
 void MoveTool::stampFloat(Document& doc, int frameIndex, const ToolEvent& e) {
-    if (!e.tab || !e.tab->hasFloating) return;
+    if (!e.tab || !e.tab->hasFloating || e.tab->floatingSource != FloatingSource::CanvasMove) {
+        return;
+    }
 
     auto& frame = doc.frame(frameIndex);
 
@@ -71,11 +169,9 @@ void MoveTool::stampFloat(Document& doc, int frameIndex, const ToolEvent& e) {
 
     int fw = e.tab->floatW;
     int fh = e.tab->floatH;
-    // Current destination of the floating canvas.
     int ox = e.tab->floatOffsetX;
     int oy = e.tab->floatOffsetY;
 
-    // Real movement delta from where the float originally started.
     int deltaX = e.tab->floatOffsetX - e.tab->floatStartX;
     int deltaY = e.tab->floatOffsetY - e.tab->floatStartY;
 
@@ -107,13 +203,8 @@ void MoveTool::stampFloat(Document& doc, int frameIndex, const ToolEvent& e) {
         doc.markDirty();
     }
 
-    // Move the existing selection shape by the same canvas movement offset.
-    // Since MoveTool floats the whole canvas starting at 0,0,
-    // floatOffsetX/Y is the actual movement delta.
+    // Keep the selection, but move its mask with the whole-canvas movement.
     if (e.selection && !e.selection->isEmpty() && m_erased) {
-        int deltaX = e.tab->floatOffsetX;
-        int deltaY = e.tab->floatOffsetY;
-
         if (deltaX != 0 || deltaY != 0) {
             int sw = e.selection->width();
             int sh = e.selection->height();
@@ -138,10 +229,14 @@ void MoveTool::stampFloat(Document& doc, int frameIndex, const ToolEvent& e) {
     }
 
     e.tab->hasFloating = false;
+    e.tab->floatingSource = FloatingSource::None;
     e.tab->floatPixels.clear();
-
-    (void)cw;
-    (void)ch;
+    e.tab->floatW = 0;
+    e.tab->floatH = 0;
+    e.tab->floatOffsetX = 0;
+    e.tab->floatOffsetY = 0;
+    e.tab->floatStartX = 0;
+    e.tab->floatStartY = 0;
 }
 
 // ── Tool events ───────────────────────────────────────────────────────────────
@@ -160,7 +255,8 @@ void MoveTool::onPress(Document& doc, int frameIndex, const ToolEvent& e) {
 }
 
 void MoveTool::onDrag(Document& doc, int frameIndex, const ToolEvent& e) {
-    if (!m_dragging || !e.tab) return;
+    if (!m_dragging || !e.tab)
+        return;
 
     int px = static_cast<int>(e.canvasX);
     int py = static_cast<int>(e.canvasY);
@@ -176,8 +272,10 @@ void MoveTool::onDrag(Document& doc, int frameIndex, const ToolEvent& e) {
         liftFloat(doc, frameIndex, e);
     }
 
-    if (!e.tab->hasFloating)
+    if (!e.tab->hasFloating ||
+        e.tab->floatingSource != FloatingSource::CanvasMove) {
         return;
+    }
 
     // Erase the original whole drawing only once, on first real movement.
     if (!m_erased) {
@@ -204,9 +302,6 @@ void MoveTool::onDrag(Document& doc, int frameIndex, const ToolEvent& e) {
         }
 
         doc.markDirty();
-
-        (void)cw;
-        (void)ch;
     }
 
     e.tab->floatOffsetX += dx;
@@ -225,9 +320,14 @@ void MoveTool::onRelease(Document& doc, int frameIndex, const ToolEvent& e) {
 }
 
 void MoveTool::commitFloat(Document& doc, int frameIndex, const ToolEvent& e) {
+    // If MoveTool is active but did not lift anything yet, do NOT destroy
+    // an existing floating selection. Commit it safely instead.
     if (!m_lifted) {
-        if (e.tab)
-            e.tab->hasFloating = false;
+        if (e.tab &&
+            e.tab->hasFloating &&
+            e.tab->floatingSource == FloatingSource::CanvasMove) {
+            stampFloat(doc, frameIndex, e);
+        }
 
         m_dragging = false;
         m_lifted   = false;

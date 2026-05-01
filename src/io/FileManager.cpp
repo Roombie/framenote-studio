@@ -1,6 +1,10 @@
 #include "io/FileManager.h"
 #include "core/Frame.h"
 
+#include <cstring>
+#include <filesystem>
+#include <cctype>
+
 #include <nlohmann/json.hpp>
 
 #define STB_IMAGE_WRITE_IMPLEMENTATION
@@ -445,6 +449,182 @@ std::unique_ptr<Document> FileManager::load(const std::string& path,
         outError = std::string("Failed to load .framenote file: ") + e.what();
         return nullptr;
     }
+}
+
+// ── PNG import helpers ────────────────────────────────────────────────────────
+
+struct LoadedPngImage {
+    std::string path;
+    int width  = 0;
+    int height = 0;
+    std::vector<uint8_t> bgra;
+};
+
+static std::string filenameOnly(const std::string& path) {
+    try {
+        return std::filesystem::path(path).filename().string();
+    }
+    catch (...) {
+        size_t slash = path.find_last_of("/\\");
+        return slash == std::string::npos ? path : path.substr(slash + 1);
+    }
+}
+
+static std::string lowercaseCopy(std::string s) {
+    std::transform(
+        s.begin(),
+        s.end(),
+        s.begin(),
+        [](unsigned char c) {
+            return static_cast<char>(std::tolower(c));
+        }
+    );
+
+    return s;
+}
+
+static bool loadPngImageFromDisk(const std::string& path,
+                                 LoadedPngImage& outImage,
+                                 std::string& outError) {
+    int w = 0;
+    int h = 0;
+    int channels = 0;
+
+    uint8_t* rgba = stbi_load(
+        path.c_str(),
+        &w,
+        &h,
+        &channels,
+        4
+    );
+
+    (void)channels;
+
+    if (!rgba) {
+        outError = "Failed to load PNG: " + path;
+        return false;
+    }
+
+    if (w <= 0 || h <= 0 || w > 8192 || h > 8192) {
+        stbi_image_free(rgba);
+        outError = "PNG size is out of range: " + path;
+        return false;
+    }
+
+    outImage.path   = path;
+    outImage.width  = w;
+    outImage.height = h;
+    outImage.bgra   = rgbaToInternalBGRA(rgba, w, h);
+
+    stbi_image_free(rgba);
+
+    return true;
+}
+
+// ── PNG import public API ─────────────────────────────────────────────────────
+
+std::unique_ptr<Document> FileManager::loadPngAsDocument(
+    const std::string& path,
+    std::string& outError
+) {
+    LoadedPngImage image;
+
+    if (!loadPngImageFromDisk(path, image, outError))
+        return nullptr;
+
+    auto doc = std::make_unique<Document>(image.width, image.height);
+
+    int frameIndex = doc->addFrame();
+    Frame& frame = doc->frame(frameIndex);
+
+    frame.restoreBuffer(std::move(image.bgra), image.width, image.height);
+    frame.setVisibleSize(image.width, image.height);
+
+    // PNG imports are intentionally unsaved Framenote documents.
+    // Save As should create the .framenote file later.
+    doc->setFilePath("");
+    doc->markDirty();
+
+    return doc;
+}
+
+std::unique_ptr<Document> FileManager::loadPngSequenceAsDocument(
+    const std::vector<std::string>& paths,
+    int fps,
+    std::string& outError
+) {
+    if (paths.empty()) {
+        outError = "No PNG files were provided.";
+        return nullptr;
+    }
+
+    std::vector<std::string> sortedPaths = paths;
+
+    std::sort(
+        sortedPaths.begin(),
+        sortedPaths.end(),
+        [](const std::string& a, const std::string& b) {
+            return lowercaseCopy(filenameOnly(a)) <
+                   lowercaseCopy(filenameOnly(b));
+        }
+    );
+
+    std::vector<LoadedPngImage> images;
+    images.reserve(sortedPaths.size());
+
+    int canvasW = 0;
+    int canvasH = 0;
+
+    for (const auto& path : sortedPaths) {
+        LoadedPngImage image;
+
+        if (!loadPngImageFromDisk(path, image, outError))
+            return nullptr;
+
+        canvasW = std::max(canvasW, image.width);
+        canvasH = std::max(canvasH, image.height);
+
+        images.push_back(std::move(image));
+    }
+
+    if (canvasW <= 0 || canvasH <= 0) {
+        outError = "Could not determine PNG sequence canvas size.";
+        return nullptr;
+    }
+
+    auto doc = std::make_unique<Document>(canvasW, canvasH);
+    doc->setFps(fps);
+
+    for (auto& image : images) {
+        std::vector<uint8_t> canvasPixels(
+            static_cast<size_t>(canvasW * canvasH * 4),
+            0
+        );
+
+        // Place each PNG at the top-left of the sequence canvas.
+        // This allows mixed-size PNGs without failing the whole import.
+        for (int y = 0; y < image.height; ++y) {
+            size_t srcOffset = static_cast<size_t>(y * image.width * 4);
+            size_t dstOffset = static_cast<size_t>(y * canvasW * 4);
+
+            std::memcpy(
+                canvasPixels.data() + dstOffset,
+                image.bgra.data() + srcOffset,
+                static_cast<size_t>(image.width * 4)
+            );
+        }
+
+        int frameIndex = doc->addFrame();
+        Frame& frame = doc->frame(frameIndex);
+
+        frame.restoreBuffer(std::move(canvasPixels), canvasW, canvasH);
+        frame.setVisibleSize(canvasW, canvasH);
+    }
+
+    doc->setFilePath("");
+    doc->markDirty();
+
+    return doc;
 }
 
 } // namespace Framenote

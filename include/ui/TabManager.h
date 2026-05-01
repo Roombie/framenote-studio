@@ -68,6 +68,11 @@ private:
 
     bool m_showRecoverDialog = false;
     std::string m_recoverStatusMsg;
+
+    int m_homeTabVisualIndex = 0;
+    int m_draggingTabVisualIndex = -1;
+    int  m_pressedTabVisualIndex = -1;
+    bool m_tabDragStarted = false;
 };
 
 } // namespace Framenote

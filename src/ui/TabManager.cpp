@@ -5,6 +5,8 @@
 #include "ui/PalettePanel.h"
 #include "ui/Theme.h"
 #include "core/Selection.h"
+#include "tools/SelectionTool.h"
+#include "tools/MoveTool.h"
 
 #include <cstdlib>
 #include <cstdint>
@@ -280,6 +282,47 @@ static std::string fitTextMiddleEllipsis(const std::string& text, float maxWidth
     return dots;
 }
 
+static void commitFloatingIfNeeded(DocumentTab& tab, ToolManager& toolManager) {
+    if (!tab.hasFloating)
+        return;
+
+    if (!tab.document || !tab.timeline)
+        return;
+
+    ToolEvent ce;
+    ce.selection = tab.selection.get();
+    ce.tab = &tab;
+
+    int frameIndex = tab.timeline->currentFrame();
+
+    if (tab.floatingSource == FloatingSource::Selection) {
+        auto* selectionTool = static_cast<SelectionTool*>(
+            toolManager.getTool(ToolType::Select)
+        );
+
+        if (selectionTool) {
+            selectionTool->commitFloat(
+                *tab.document,
+                frameIndex,
+                ce
+            );
+        }
+    }
+    else if (tab.floatingSource == FloatingSource::CanvasMove) {
+        auto* moveTool = static_cast<MoveTool*>(
+            toolManager.getTool(ToolType::Move)
+        );
+
+        if (moveTool) {
+            moveTool->commitFloat(
+                *tab.document,
+                frameIndex,
+                ce
+            );
+        }
+    }
+}
+
 static void showFileInFolder(const std::string& path) {
 #if defined(_WIN32)
     std::string command = "explorer.exe /select,\"" + path + "\"";
@@ -408,43 +451,147 @@ void TabManager::renderTabBar() {
 
     ImDrawList* dl = ImGui::GetWindowDrawList();
 
-    bool homeActive = (m_activeIndex == -1);
-
-    if (homeActive)
-        ImGui::PushStyleColor(ImGuiCol_Button, style.Colors[ImGuiCol_ButtonActive]);
-
-    if (ImGui::Button("  Home  "))
-        m_activeIndex = -1;
-
-    if (homeActive)
-        ImGui::PopStyleColor();
-
-    float homeRightEdge = ImGui::GetItemRectMax().x + 4;
-
-    struct TabRect {
-        float x;
-        float w;
+    struct TabItem {
+        bool isHome = false;
+        int docIndex = -1;
     };
 
+    struct TabRect {
+        float x = 0.0f;
+        float w = 0.0f;
+    };
+
+    const int totalVisualTabs = static_cast<int>(m_tabs.size()) + 1;
+
+    m_homeTabVisualIndex = std::max(
+        0,
+        std::min(m_homeTabVisualIndex, totalVisualTabs - 1)
+    );
+
+    std::vector<TabItem> visualItems;
     std::vector<TabRect> tabRects;
 
-    for (int i = 0; i < static_cast<int>(m_tabs.size()); ++i) {
-        ImGui::SameLine();
+    visualItems.reserve(totalVisualTabs);
+    tabRects.reserve(totalVisualTabs);
 
-        bool active   = (m_activeIndex == i);
-        bool dragging = (m_draggingTab == i);
+    auto docIndexToVisualIndex = [&](int docIndex) -> int {
+        if (docIndex < 0)
+            return -1;
 
-        if (dragging)
+        return docIndex < m_homeTabVisualIndex
+            ? docIndex
+            : docIndex + 1;
+    };
+
+    auto eraseDocumentTab = [&](int docIndex) {
+        if (docIndex < 0 || docIndex >= static_cast<int>(m_tabs.size()))
+            return;
+
+        int visualIndex = docIndexToVisualIndex(docIndex);
+
+        m_tabs.erase(m_tabs.begin() + docIndex);
+
+        if (visualIndex >= 0 && visualIndex < m_homeTabVisualIndex)
+            m_homeTabVisualIndex--;
+
+        m_homeTabVisualIndex = std::max(
+            0,
+            std::min(m_homeTabVisualIndex, static_cast<int>(m_tabs.size()))
+        );
+
+        if (m_activeIndex == docIndex) {
+            if (m_tabs.empty())
+                m_activeIndex = -1;
+            else
+                m_activeIndex = std::min(docIndex, static_cast<int>(m_tabs.size()) - 1);
+        }
+        else if (m_activeIndex > docIndex) {
+            m_activeIndex--;
+        }
+
+        m_draggingTabVisualIndex = -1;
+    };
+
+    auto rebuildFromVisualOrder = [&](const std::vector<TabItem>& orderedItems) {
+        bool homeWasActive = (m_activeIndex == -1);
+
+        DocumentTab* activeDoc = nullptr;
+
+        if (m_activeIndex >= 0 && m_activeIndex < static_cast<int>(m_tabs.size())) {
+            activeDoc = m_tabs[m_activeIndex].get();
+        }
+
+        std::vector<std::unique_ptr<DocumentTab>> reorderedTabs;
+        reorderedTabs.reserve(m_tabs.size());
+
+        int newHomeIndex = 0;
+        int newActiveIndex = -1;
+
+        for (int visualIndex = 0; visualIndex < static_cast<int>(orderedItems.size()); ++visualIndex) {
+            const TabItem& item = orderedItems[visualIndex];
+
+            if (item.isHome) {
+                newHomeIndex = visualIndex;
+                continue;
+            }
+
+            if (item.docIndex < 0 || item.docIndex >= static_cast<int>(m_tabs.size()))
+                continue;
+
+            DocumentTab* docPtr = m_tabs[item.docIndex].get();
+
+            reorderedTabs.push_back(std::move(m_tabs[item.docIndex]));
+
+            if (docPtr == activeDoc) {
+                newActiveIndex = static_cast<int>(reorderedTabs.size()) - 1;
+            }
+        }
+
+        m_tabs = std::move(reorderedTabs);
+        m_homeTabVisualIndex = newHomeIndex;
+        m_activeIndex = homeWasActive ? -1 : newActiveIndex;
+    };
+
+    for (int visualIndex = 0; visualIndex < totalVisualTabs; ++visualIndex) {
+        if (visualIndex > 0)
+            ImGui::SameLine();
+
+        const bool isHome = (visualIndex == m_homeTabVisualIndex);
+
+        TabItem item;
+        item.isHome = isHome;
+        item.docIndex = isHome
+            ? -1
+            : (visualIndex < m_homeTabVisualIndex ? visualIndex : visualIndex - 1);
+
+        visualItems.push_back(item);
+
+        bool active = isHome
+            ? (m_activeIndex == -1)
+            : (m_activeIndex == item.docIndex);
+
+        bool dragging = (m_draggingTabVisualIndex == visualIndex);
+
+        if (dragging) {
             ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.2f, 0.5f, 0.9f, 0.4f));
-        else if (active)
+        }
+        else if (active) {
             ImGui::PushStyleColor(ImGuiCol_Button, style.Colors[ImGuiCol_ButtonActive]);
+        }
 
-        std::string label = m_tabs[i]->name;
+        std::string label;
 
-        if (m_tabs[i]->document->isDirty())
-            label += " *";
+        if (isHome) {
+            label = "  Home  ##tab_home";
+        }
+        else {
+            label = m_tabs[item.docIndex]->name;
 
-        label += "##tab" + std::to_string(i);
+            if (m_tabs[item.docIndex]->document->isDirty())
+                label += " *";
+
+            label += "##tab" + std::to_string(item.docIndex);
+        }
 
         float tabX = ImGui::GetCursorScreenPos().x;
 
@@ -456,127 +603,171 @@ void TabManager::renderTabBar() {
         if (dragging || active)
             ImGui::PopStyleColor();
 
-        if (ImGui::IsItemClicked(ImGuiMouseButton_Left))
-            m_activeIndex = i;
-
-        if (ImGui::IsItemActive() && ImGui::IsMouseDragging(ImGuiMouseButton_Left, 4.0f)) {
-            if (m_draggingTab < 0)
-                m_draggingTab = i;
+        if (ImGui::IsItemClicked(ImGuiMouseButton_Left)) {
+            m_pressedTabVisualIndex = visualIndex;
+            m_tabDragStarted = false;
         }
 
-        ImGui::SameLine();
+        constexpr float TabDragThreshold = 1.5f;
 
-        std::string closeId = "x##close" + std::to_string(i);
-
-        ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0, 0, 0, 0));
-
-        if (ImGui::SmallButton(closeId.c_str())) {
-            if (m_tabs[i]->document->isDirty()) {
-                m_pendingCloseIndex = i;
-                ImGui::OpenPopup("Unsaved Changes##close");
-            }
-            else {
-                m_tabs.erase(m_tabs.begin() + i);
-
-                if (m_activeIndex >= static_cast<int>(m_tabs.size()))
-                    m_activeIndex = m_tabs.empty() ? -1 : static_cast<int>(m_tabs.size()) - 1;
-
-                if (m_draggingTab >= static_cast<int>(m_tabs.size()))
-                    m_draggingTab = -1;
-
-                ImGui::PopStyleColor();
-                ImGui::End();
-                return;
+        if (m_pressedTabVisualIndex == visualIndex &&
+            ImGui::IsMouseDragging(ImGuiMouseButton_Left, TabDragThreshold)) {
+            if (m_draggingTabVisualIndex < 0) {
+                m_draggingTabVisualIndex = visualIndex;
+                m_tabDragStarted = true;
             }
         }
 
-        ImGui::PopStyleColor();
+        if (!isHome) {
+            ImGui::SameLine();
+
+            std::string closeId = "x##close" + std::to_string(item.docIndex);
+
+            ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0, 0, 0, 0));
+
+            if (ImGui::SmallButton(closeId.c_str())) {
+                if (m_tabs[item.docIndex]->document->isDirty()) {
+                    m_pendingCloseIndex = item.docIndex;
+                    ImGui::OpenPopup("Unsaved Changes##close");
+                }
+                else {
+                    eraseDocumentTab(item.docIndex);
+
+                    ImGui::PopStyleColor();
+                    ImGui::End();
+                    return;
+                }
+            }
+
+            ImGui::PopStyleColor();
+        }
     }
 
-    if (m_draggingTab >= 0 && m_draggingTab < static_cast<int>(m_tabs.size())) {
+    if (m_pressedTabVisualIndex >= 0 &&
+        m_draggingTabVisualIndex < 0 &&
+        ImGui::IsMouseReleased(ImGuiMouseButton_Left)) {
+        
+        if (m_pressedTabVisualIndex < static_cast<int>(visualItems.size())) {
+            const TabItem& pressedItem = visualItems[m_pressedTabVisualIndex];
+
+            m_activeIndex = pressedItem.isHome
+                ? -1
+                : pressedItem.docIndex;
+        }
+
+        m_pressedTabVisualIndex = -1;
+        m_tabDragStarted = false;
+    }
+
+    if (m_draggingTabVisualIndex >= 0 &&
+        m_draggingTabVisualIndex < static_cast<int>(visualItems.size())) {
         float mouseX = io.MousePos.x;
 
-        std::string ghostLabel = m_tabs[m_draggingTab]->name;
+        const TabItem& draggingItem = visualItems[m_draggingTabVisualIndex];
 
-        if (m_tabs[m_draggingTab]->document->isDirty())
-            ghostLabel += " *";
+        std::string ghostLabel;
+
+        if (draggingItem.isHome) {
+            ghostLabel = "Home";
+        }
+        else if (draggingItem.docIndex >= 0 &&
+                 draggingItem.docIndex < static_cast<int>(m_tabs.size())) {
+            ghostLabel = m_tabs[draggingItem.docIndex]->name;
+
+            if (m_tabs[draggingItem.docIndex]->document->isDirty())
+                ghostLabel += " *";
+        }
 
         ImVec2 textSize = ImGui::CalcTextSize(ghostLabel.c_str());
 
-        float ghostW = textSize.x + 16;
+        float ghostW = textSize.x + 16.0f;
         float ghostX = mouseX - ghostW * 0.5f;
-        float ghostY = ImGui::GetWindowPos().y + 4;
+        float ghostY = ImGui::GetWindowPos().y + 4.0f;
 
         dl->AddRectFilled(
             {ghostX, ghostY},
-            {ghostX + ghostW, ghostY + 24},
+            {ghostX + ghostW, ghostY + 24.0f},
             IM_COL32(44, 184, 213, 180),
             4.0f
         );
 
         dl->AddText(
-            {ghostX + 8, ghostY + 4},
+            {ghostX + 8.0f, ghostY + 4.0f},
             IM_COL32(255, 255, 255, 255),
             ghostLabel.c_str()
         );
 
-        int dropTarget = m_draggingTab;
+        int insertionIndex = 0;
 
-        if (mouseX > tabRects[m_draggingTab].x + tabRects[m_draggingTab].w * 0.5f) {
-            for (int j = m_draggingTab + 1; j < static_cast<int>(tabRects.size()); ++j) {
-                if (mouseX > tabRects[j].x + tabRects[j].w * 0.5f)
-                    dropTarget = j;
-            }
-        }
-        else {
-            for (int j = m_draggingTab - 1; j >= 0; --j) {
-                if (mouseX < tabRects[j].x + tabRects[j].w * 0.5f &&
-                    tabRects[j].x >= homeRightEdge) {
-                    dropTarget = j;
-                }
-            }
+        for (int i = 0; i < static_cast<int>(tabRects.size()); ++i) {
+            float center = tabRects[i].x + tabRects[i].w * 0.5f;
+
+            if (mouseX > center)
+                insertionIndex = i + 1;
+            else
+                break;
         }
 
-        if (dropTarget != m_draggingTab &&
-            dropTarget >= 0 &&
-            dropTarget < static_cast<int>(tabRects.size())) {
-            float lineX = (dropTarget < m_draggingTab)
-                ? tabRects[dropTarget].x
-                : tabRects[dropTarget].x + tabRects[dropTarget].w;
+        int finalInsertIndex = insertionIndex;
+
+        if (finalInsertIndex > m_draggingTabVisualIndex)
+            finalInsertIndex--;
+
+        finalInsertIndex = std::max(
+            0,
+            std::min(finalInsertIndex, static_cast<int>(visualItems.size()) - 1)
+        );
+
+        if (finalInsertIndex != m_draggingTabVisualIndex) {
+            float lineX = 0.0f;
+
+            if (insertionIndex <= 0) {
+                lineX = tabRects.front().x;
+            }
+            else if (insertionIndex >= static_cast<int>(tabRects.size())) {
+                lineX = tabRects.back().x + tabRects.back().w;
+            }
+            else {
+                lineX = tabRects[insertionIndex].x;
+            }
 
             float lineY = ImGui::GetWindowPos().y;
 
             dl->AddLine(
-                {lineX, lineY + 2},
-                {lineX, lineY + 30},
+                {lineX, lineY + 2.0f},
+                {lineX, lineY + 30.0f},
                 IM_COL32(44, 184, 213, 255),
                 2.0f
             );
         }
 
         if (ImGui::IsMouseReleased(ImGuiMouseButton_Left)) {
-            if (dropTarget != m_draggingTab &&
-                dropTarget >= 0 &&
-                dropTarget < static_cast<int>(m_tabs.size())) {
-                auto tab = std::move(m_tabs[m_draggingTab]);
+            if (finalInsertIndex != m_draggingTabVisualIndex) {
+                std::vector<TabItem> reorderedItems = visualItems;
 
-                m_tabs.erase(m_tabs.begin() + m_draggingTab);
+                TabItem movedItem = reorderedItems[m_draggingTabVisualIndex];
+                reorderedItems.erase(reorderedItems.begin() + m_draggingTabVisualIndex);
 
-                int insertAt = dropTarget > m_draggingTab
-                    ? dropTarget - 1
-                    : dropTarget;
+                int insertAt = insertionIndex;
 
-                insertAt = std::max(0, std::min(insertAt, static_cast<int>(m_tabs.size())));
+                if (insertAt > m_draggingTabVisualIndex)
+                    insertAt--;
 
-                m_tabs.insert(m_tabs.begin() + insertAt, std::move(tab));
-                m_activeIndex = insertAt;
+                insertAt = std::max(
+                    0,
+                    std::min(insertAt, static_cast<int>(reorderedItems.size()))
+                );
+
+                reorderedItems.insert(reorderedItems.begin() + insertAt, movedItem);
+
+                rebuildFromVisualOrder(reorderedItems);
             }
 
-            m_draggingTab = -1;
+            m_draggingTabVisualIndex = -1;
         }
     }
     else if (ImGui::IsMouseReleased(ImGuiMouseButton_Left)) {
-        m_draggingTab = -1;
+        m_draggingTabVisualIndex = -1;
     }
 
     if (ImGui::BeginPopupModal(
@@ -593,10 +784,7 @@ void TabManager::renderTabBar() {
         ImGui::Separator();
 
         if (ImGui::Button("Don't Save", {120, 0})) {
-            m_tabs.erase(m_tabs.begin() + m_pendingCloseIndex);
-
-            if (m_activeIndex >= static_cast<int>(m_tabs.size()))
-                m_activeIndex = m_tabs.empty() ? -1 : static_cast<int>(m_tabs.size()) - 1;
+            eraseDocumentTab(m_pendingCloseIndex);
 
             m_pendingCloseIndex = -1;
             ImGui::CloseCurrentPopup();
@@ -634,6 +822,7 @@ void TabManager::renderHomeTab(ToolManager& toolManager) {
         ImGuiWindowFlags_NoScrollbar);
     
     bool homeInteractionsBlocked =
+        ImGui::IsPopupOpen("New Document##dlg") ||
         ImGui::IsPopupOpen("Recover Files##home") ||
         ImGui::IsPopupOpen("Clear Recent Projects##home");
 
@@ -773,6 +962,9 @@ void TabManager::renderHomeTab(ToolManager& toolManager) {
         ImGuiWindowFlags_AlwaysVerticalScrollbar
     );
 
+    const bool recentListCanReceiveMouse =
+        ImGui::IsWindowHovered(ImGuiHoveredFlags_None);
+
     const auto& recent = m_recentFiles.entries();
 
     if (recent.empty()) {
@@ -807,7 +999,7 @@ void TabManager::renderHomeTab(ToolManager& toolManager) {
             ImVec2 cardMax = {cardMin.x + cardW, cardMin.y + cardH};
 
             bool cardHovered =
-                !homeInteractionsBlocked &&
+                recentListCanReceiveMouse &&
                 ImGui::IsMouseHoveringRect(cardMin, cardMax, true);
 
             ImU32 bgColor = exists
@@ -985,7 +1177,7 @@ void TabManager::renderHomeTab(ToolManager& toolManager) {
             ImGui::EndGroup();
 
             bool hoveringCardOnly =
-                !homeInteractionsBlocked &&
+                recentListCanReceiveMouse &&
                 cardHovered &&
                 !titleHovered &&
                 !metadataHovered &&
@@ -1305,7 +1497,15 @@ void TabManager::renderDocumentTab(DocumentTab& tab, ToolManager& toolManager) {
 
     ImGui::End();
 
+    ToolType toolBefore = toolManager.activeToolType();
+
     ToolsPanel(&toolManager, m_icons).render();
+
+    ToolType toolAfter = toolManager.activeToolType();
+
+    if (toolAfter != toolBefore) {
+        commitFloatingIfNeeded(tab, toolManager);
+    }
 
     PalettePanel(
         tab.document.get(),

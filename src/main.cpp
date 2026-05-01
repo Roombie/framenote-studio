@@ -77,11 +77,37 @@ int main(int argc, char* argv[]) {
         SDL_Event event;
         while (SDL_PollEvent(&event)) {
             ImGui_ImplSDL3_ProcessEvent(&event);
-            if (event.type == SDL_EVENT_QUIT)
+            if (event.type == SDL_EVENT_QUIT) {
                 pendingQuit = true;
+            }
+
             if (event.type == SDL_EVENT_WINDOW_CLOSE_REQUESTED &&
-                event.window.windowID == SDL_GetWindowID(window))
+                event.window.windowID == SDL_GetWindowID(window)) {
                 pendingQuit = true;
+            }
+
+            if (event.type == SDL_EVENT_DROP_BEGIN) {
+                if (event.drop.windowID == 0 ||
+                    event.drop.windowID == SDL_GetWindowID(window)) {
+                    mainWindow.beginDropBatch();
+                }
+            }
+
+            if (event.type == SDL_EVENT_DROP_FILE) {
+                if (event.drop.windowID == 0 ||
+                    event.drop.windowID == SDL_GetWindowID(window)) {
+                    if (event.drop.data) {
+                        mainWindow.addDroppedFile(event.drop.data);
+                    }
+                }
+            }
+
+            if (event.type == SDL_EVENT_DROP_COMPLETE) {
+                if (event.drop.windowID == 0 ||
+                    event.drop.windowID == SDL_GetWindowID(window)) {
+                    mainWindow.finishDropBatch();
+                }
+            }
         }
 
         if (pendingQuit) {

@@ -12,6 +12,13 @@
 
 namespace Framenote {
 
+enum class FloatingSource {
+    None,
+    Selection,
+    CanvasMove
+};
+
+
 struct DocumentTab {
     std::string                      name;
     std::unique_ptr<Document>        document;
@@ -43,6 +50,7 @@ struct DocumentTab {
 
     // Floating selection (Move tool) — pixels lifted off the canvas
     bool                   hasFloating    = false;
+    FloatingSource         floatingSource = FloatingSource::None;
     int                    floatOffsetX   = 0;
     int                    floatOffsetY   = 0;
     int                    floatStartX    = 0;

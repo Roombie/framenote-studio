@@ -750,7 +750,7 @@ void CanvasPanel::render() {
             ce.selection = m_selection;
             ce.tab = m_tab;
 
-            if (m_toolManager->activeToolType() == ToolType::Select) {
+            if (m_tab->floatingSource == FloatingSource::Selection) {
                 auto* selectionTool = static_cast<SelectionTool*>(
                     m_toolManager->getTool(ToolType::Select)
                 );
@@ -762,7 +762,8 @@ void CanvasPanel::render() {
                         ce
                     );
                 }
-            } else {
+            }
+            else if (m_tab->floatingSource == FloatingSource::CanvasMove) {
                 auto* moveTool = static_cast<MoveTool*>(
                     m_toolManager->getTool(ToolType::Move)
                 );
@@ -818,6 +819,7 @@ void CanvasPanel::render() {
         }
 
         if (ImGui::IsKeyPressed(ImGuiKey_V, false)) {
+            commitFloatIfNeeded();
             m_toolManager->selectTool(ToolType::Move);
         }
 

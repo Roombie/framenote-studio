@@ -1,4 +1,12 @@
 #include "ui/MainWindow.h"
+#include "io/FileManager.h"
+
+#include <algorithm>
+#include <cctype>
+#include <filesystem>
+#include <sstream>
+#include <vector>
+
 #include "ui/Theme.h"
 #include "io/FileManager.h"
 #include "io/GifExporter.h"
@@ -15,6 +23,68 @@ namespace Framenote {
 static const char* FILTER_FRAMENOTE = "Framenote Files\0*.framenote\0All Files\0*.*\0";
 static const char* FILTER_GIF       = "GIF Files\0*.gif\0All Files\0*.*\0";
 static const char* FILTER_PNG       = "PNG Files\0*.png\0All Files\0*.*\0";
+
+static std::string toLowerCopy(std::string s) {
+    std::transform(
+        s.begin(),
+        s.end(),
+        s.begin(),
+        [](unsigned char c) {
+            return static_cast<char>(std::tolower(c));
+        }
+    );
+
+    return s;
+}
+
+static std::string pathFilename(const std::string& path) {
+    try {
+        return std::filesystem::path(path).filename().string();
+    }
+    catch (...) {
+        size_t slash = path.find_last_of("/\\");
+        return slash == std::string::npos ? path : path.substr(slash + 1);
+    }
+}
+
+static std::string pathExtensionLower(const std::string& path) {
+    try {
+        return toLowerCopy(std::filesystem::path(path).extension().string());
+    }
+    catch (...) {
+        std::string name = pathFilename(path);
+        size_t dot = name.find_last_of('.');
+
+        if (dot == std::string::npos)
+            return "";
+
+        return toLowerCopy(name.substr(dot));
+    }
+}
+
+static std::string parentFolderName(const std::string& path) {
+    try {
+        std::string parent =
+            std::filesystem::path(path).parent_path().filename().string();
+
+        if (!parent.empty())
+            return parent;
+    }
+    catch (...) {
+    }
+
+    return "Imported PNG Sequence";
+}
+
+static std::string joinImportErrors(const std::vector<std::string>& errors) {
+    std::ostringstream oss;
+
+    for (const auto& err : errors) {
+        oss << "- " << err << "\n";
+    }
+
+    return oss.str();
+}
 
 // Captures all frames + canvas size as a HistoryEntry to pass into undo/redo
 static HistoryEntry captureCurrentEntry(DocumentTab* tab) {
@@ -108,6 +178,7 @@ void MainWindow::render() {
     renderCanvasSizeDialog();
     renderExportDialog();
     renderOnionOpacityDialog();
+    renderDropImportDialog();
     renderErrorDialog();
 
     // -- Global keyboard shortcuts ---------------------------------------------
@@ -689,6 +760,381 @@ void MainWindow::renderOnionOpacityDialog() {
         ImGui::EndPopup();
     }
     m_showOnionDialog = false;
+}
+
+// ── Drag/drop import ──────────────────────────────────────────────────────────
+
+void MainWindow::beginDropBatch() {
+    m_dropBatchPaths.clear();
+    m_collectingDropBatch = true;
+}
+
+void MainWindow::addDroppedFile(const std::string& path) {
+    if (path.empty())
+        return;
+
+    // Some platforms may send DROP_FILE without a DROP_BEGIN first.
+    if (!m_collectingDropBatch) {
+        beginDropBatch();
+    }
+
+    m_dropBatchPaths.push_back(path);
+}
+
+void MainWindow::finishDropBatch() {
+    if (!m_collectingDropBatch && m_dropBatchPaths.empty())
+        return;
+
+    m_collectingDropBatch = false;
+    m_dropFiles.clear();
+
+    for (const auto& path : m_dropBatchPaths) {
+        m_dropFiles.push_back(classifyDroppedFile(path));
+    }
+
+    m_dropBatchPaths.clear();
+
+    size_t compatibleCount = compatibleDroppedFileCount();
+
+    if (compatibleCount == 0) {
+        showError("No compatible files were dropped.\n\nSupported files:\n- .framenote\n- .png");
+        m_dropFiles.clear();
+        return;
+    }
+
+    // Single compatible file with no mixed unsupported batch:
+    // open/import directly for a fast desktop-native workflow.
+    if (m_dropFiles.size() == 1 && compatibleCount == 1) {
+        processDroppedFiles();
+        return;
+    }
+
+    // Multiple files or mixed compatible/unsupported files:
+    // show options first.
+    m_dropImportMode = DropImportMode::SeparateTabs;
+    m_dropOpenFramenoteFiles = true;
+    m_showDropImportDialog = true;
+}
+
+MainWindow::DroppedFileInfo MainWindow::classifyDroppedFile(
+    const std::string& path
+) const {
+    DroppedFileInfo info;
+    info.path = path;
+    info.name = pathFilename(path);
+
+    std::string ext = pathExtensionLower(path);
+
+    if (ext == ".framenote") {
+        info.type = DroppedFileType::Framenote;
+    }
+    else if (ext == ".png") {
+        info.type = DroppedFileType::Png;
+    }
+    else {
+        info.type = DroppedFileType::Unsupported;
+    }
+
+    return info;
+}
+
+size_t MainWindow::droppedFileCount(DroppedFileType type) const {
+    size_t count = 0;
+
+    for (const auto& file : m_dropFiles) {
+        if (file.type == type)
+            ++count;
+    }
+
+    return count;
+}
+
+size_t MainWindow::compatibleDroppedFileCount() const {
+    return droppedFileCount(DroppedFileType::Framenote) +
+           droppedFileCount(DroppedFileType::Png);
+}
+
+bool MainWindow::openDroppedFramenote(const std::string& path,
+                                      std::string& outError) {
+    auto doc = FileManager::load(path, outError);
+
+    if (!doc)
+        return false;
+
+    std::string name = pathFilename(path);
+
+    m_tabManager->openDocument(std::move(doc), name, path);
+
+    if (auto* opened = m_tabManager->activeTab()) {
+        m_tabManager->recordRecentFile(path, *opened->document);
+    }
+
+    return true;
+}
+
+bool MainWindow::openDroppedPng(const std::string& path,
+                                std::string& outError) {
+    auto doc = FileManager::loadPngAsDocument(path, outError);
+
+    if (!doc)
+        return false;
+
+    std::string name = pathFilename(path);
+
+    m_tabManager->openDocument(std::move(doc), name, "");
+
+    return true;
+}
+
+bool MainWindow::openDroppedPngSequence(const std::vector<std::string>& paths,
+                                        std::string& outError) {
+    auto doc = FileManager::loadPngSequenceAsDocument(
+        paths,
+        8,
+        outError
+    );
+
+    if (!doc)
+        return false;
+
+    std::string name = "PNG Sequence";
+
+    if (!paths.empty()) {
+        std::string parent = parentFolderName(paths.front());
+
+        if (!parent.empty())
+            name = parent + " sequence";
+    }
+
+    m_tabManager->openDocument(std::move(doc), name, "");
+
+    return true;
+}
+
+void MainWindow::processDroppedFiles() {
+    int openedCount = 0;
+    int ignoredCount = static_cast<int>(droppedFileCount(DroppedFileType::Unsupported));
+
+    std::vector<std::string> errors;
+
+    const bool usePngSequence =
+        m_dropImportMode == DropImportMode::PngSequence &&
+        droppedFileCount(DroppedFileType::Png) > 0;
+
+    if (usePngSequence) {
+        std::vector<std::string> pngPaths;
+
+        for (const auto& file : m_dropFiles) {
+            if (file.type == DroppedFileType::Png)
+                pngPaths.push_back(file.path);
+        }
+
+        if (!pngPaths.empty()) {
+            std::string err;
+
+            if (openDroppedPngSequence(pngPaths, err)) {
+                ++openedCount;
+            }
+            else {
+                errors.push_back("PNG sequence: " + err);
+            }
+        }
+
+        if (m_dropOpenFramenoteFiles) {
+            for (const auto& file : m_dropFiles) {
+                if (file.type != DroppedFileType::Framenote)
+                    continue;
+
+                std::string err;
+
+                if (openDroppedFramenote(file.path, err)) {
+                    ++openedCount;
+                }
+                else {
+                    errors.push_back(file.name + ": " + err);
+                }
+            }
+        }
+    }
+    else {
+        for (const auto& file : m_dropFiles) {
+            std::string err;
+            bool opened = false;
+
+            if (file.type == DroppedFileType::Framenote) {
+                opened = openDroppedFramenote(file.path, err);
+            }
+            else if (file.type == DroppedFileType::Png) {
+                opened = openDroppedPng(file.path, err);
+            }
+            else {
+                continue;
+            }
+
+            if (opened) {
+                ++openedCount;
+            }
+            else {
+                errors.push_back(file.name + ": " + err);
+            }
+        }
+    }
+
+    if (openedCount > 0) {
+        m_statusMsg = "Opened/imported " + std::to_string(openedCount) +
+                      (openedCount == 1 ? " item." : " items.");
+
+        if (ignoredCount > 0) {
+            m_statusMsg += " Ignored " + std::to_string(ignoredCount) +
+                           " unsupported file";
+            m_statusMsg += ignoredCount == 1 ? "." : "s.";
+        }
+    }
+
+    if (!errors.empty()) {
+        showError("Some dropped files could not be opened:\n\n" +
+                  joinImportErrors(errors));
+    }
+
+    m_dropFiles.clear();
+    m_dropBatchPaths.clear();
+}
+
+void MainWindow::renderDropImportDialog() {
+    if (m_showDropImportDialog) {
+        ImGui::SetNextWindowPos(
+            ImGui::GetMainViewport()->GetCenter(),
+            ImGuiCond_Always,
+            {0.5f, 0.5f}
+        );
+
+        ImGui::OpenPopup("Import Dropped Files##dropImport");
+        m_showDropImportDialog = false;
+    }
+
+    ImGui::SetNextWindowPos(
+        ImGui::GetMainViewport()->GetCenter(),
+        ImGuiCond_Always,
+        {0.5f, 0.5f}
+    );
+
+    ImGui::SetNextWindowSizeConstraints({420, 0}, {680, 560});
+
+    if (ImGui::BeginPopupModal(
+            "Import Dropped Files##dropImport",
+            nullptr,
+            ImGuiWindowFlags_AlwaysAutoResize)) {
+        size_t pngCount        = droppedFileCount(DroppedFileType::Png);
+        size_t framenoteCount  = droppedFileCount(DroppedFileType::Framenote);
+        size_t unsupportedCount = droppedFileCount(DroppedFileType::Unsupported);
+
+        ImGui::Text("Dropped files:");
+        ImGui::TextDisabled(
+            "%d PNG  |  %d Framenote  |  %d unsupported",
+            static_cast<int>(pngCount),
+            static_cast<int>(framenoteCount),
+            static_cast<int>(unsupportedCount)
+        );
+
+        ImGui::Separator();
+        ImGui::Spacing();
+
+        if (ImGui::RadioButton(
+                "Open each compatible file as a separate tab",
+                m_dropImportMode == DropImportMode::SeparateTabs)) {
+            m_dropImportMode = DropImportMode::SeparateTabs;
+        }
+
+        ImGui::BeginDisabled(pngCount == 0);
+
+        if (ImGui::RadioButton(
+                "Import PNG files as one animation sequence",
+                m_dropImportMode == DropImportMode::PngSequence)) {
+            m_dropImportMode = DropImportMode::PngSequence;
+        }
+
+        ImGui::EndDisabled();
+
+        if (pngCount == 0 &&
+            m_dropImportMode == DropImportMode::PngSequence) {
+            m_dropImportMode = DropImportMode::SeparateTabs;
+        }
+
+        if (m_dropImportMode == DropImportMode::PngSequence &&
+            framenoteCount > 0) {
+            ImGui::Checkbox(
+                "Also open dropped .framenote projects",
+                &m_dropOpenFramenoteFiles
+            );
+        }
+
+        ImGui::Spacing();
+        ImGui::Separator();
+        ImGui::Spacing();
+
+        ImGui::Text("Files:");
+
+        ImGui::BeginChild(
+            "##dropped-file-list",
+            {560, 170},
+            true,
+            ImGuiWindowFlags_AlwaysVerticalScrollbar
+        );
+
+        for (const auto& file : m_dropFiles) {
+            const char* typeLabel = "Unsupported";
+
+            ImVec4 color = ImVec4(1.0f, 0.45f, 0.45f, 1.0f);
+
+            if (file.type == DroppedFileType::Png) {
+                typeLabel = "PNG";
+                color = ImVec4(0.75f, 0.90f, 1.0f, 1.0f);
+            }
+            else if (file.type == DroppedFileType::Framenote) {
+                typeLabel = "Framenote";
+                color = ImVec4(0.75f, 1.0f, 0.75f, 1.0f);
+            }
+
+            ImGui::TextColored(color, "[%s]", typeLabel);
+            ImGui::SameLine();
+            ImGui::TextUnformatted(file.name.c_str());
+
+            if (ImGui::IsItemHovered()) {
+                ImGui::SetTooltip("%s", file.path.c_str());
+            }
+        }
+
+        ImGui::EndChild();
+
+        if (unsupportedCount > 0) {
+            ImGui::TextDisabled(
+                "Unsupported files will be ignored. Supported: .framenote, .png"
+            );
+        }
+
+        ImGui::Spacing();
+        ImGui::Separator();
+        ImGui::Spacing();
+
+        float buttonWidth =
+            (ImGui::GetContentRegionAvail().x -
+             ImGui::GetStyle().ItemSpacing.x) * 0.5f;
+
+        if (ImGui::Button("Import / Open##drop", {buttonWidth, 0})) {
+            ImGui::CloseCurrentPopup();
+            processDroppedFiles();
+        }
+
+        ImGui::SameLine();
+
+        if (ImGui::Button("Cancel##drop", {buttonWidth, 0})) {
+            m_dropFiles.clear();
+            m_dropBatchPaths.clear();
+            ImGui::CloseCurrentPopup();
+        }
+
+        ImGui::EndPopup();
+    }
 }
 
 } // namespace Framenote

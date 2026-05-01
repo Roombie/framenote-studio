@@ -2,6 +2,7 @@
 #include "core/Selection.h"
 #include "core/DocumentTab.h"
 #include <algorithm>
+#include <utility>
 
 namespace Framenote {
 
@@ -41,12 +42,17 @@ void SelectionTool::liftFloat(Document& doc, int frameIndex, const ToolEvent& e)
     }
 
     e.tab->hasFloating = true;
+    e.tab->floatingSource = FloatingSource::Selection;
     doc.markDirty();
     (void)cw;
 }
 
 void SelectionTool::stampFloat(Document& doc, int frameIndex, const ToolEvent& e) {
-    if (!e.tab || !e.tab->hasFloating) return;
+    if (!e.tab ||
+        !e.tab->hasFloating ||
+        e.tab->floatingSource != FloatingSource::Selection) { 
+        return; 
+    }
 
     auto& frame = doc.frame(frameIndex);
     int cw = doc.canvasSize().width;
@@ -92,7 +98,15 @@ void SelectionTool::stampFloat(Document& doc, int frameIndex, const ToolEvent& e
     }
 
     e.tab->hasFloating = false;
+    e.tab->floatingSource = FloatingSource::None;
     e.tab->floatPixels.clear();
+    e.tab->floatW = 0;
+    e.tab->floatH = 0;
+    e.tab->floatOffsetX = 0;
+    e.tab->floatOffsetY = 0;
+    e.tab->floatStartX = 0;
+    e.tab->floatStartY = 0;
+
     doc.markDirty();
     (void)cw; (void)ch;
 }
@@ -120,7 +134,8 @@ void SelectionTool::onPress(Document& doc, int frameIndex, const ToolEvent& e) {
 
     bool hasFloat =
         e.tab &&
-        e.tab->hasFloating;
+        e.tab->hasFloating &&
+        e.tab->floatingSource == FloatingSource::Selection;
 
     bool insideFloatBounds =
         hasFloat &&
@@ -202,7 +217,8 @@ void SelectionTool::onDrag(Document& doc, int frameIndex, const ToolEvent& e) {
     int px = static_cast<int>(e.canvasX);
     int py = static_cast<int>(e.canvasY);
 
-    if (m_mode == Mode::Moving && e.tab && e.tab->hasFloating) {
+    if (m_mode == Mode::Moving && e.tab && e.tab->hasFloating && e.tab->floatingSource == FloatingSource::Selection) {
+
         e.tab->floatOffsetX += px - m_dragLastX;
         e.tab->floatOffsetY += py - m_dragLastY;
 
