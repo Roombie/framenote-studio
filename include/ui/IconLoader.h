@@ -11,6 +11,11 @@ struct ToolIcons {
     SDL_Texture* eraser     = nullptr;
     SDL_Texture* fill       = nullptr;
     SDL_Texture* eyedropper = nullptr;
+    SDL_Texture* line       = nullptr;
+    SDL_Texture* rectangle  = nullptr;
+    SDL_Texture* ellipse    = nullptr;
+    SDL_Texture* select     = nullptr;
+    SDL_Texture* move       = nullptr;
 
     // Timeline controls
     SDL_Texture* firstFrame = nullptr;

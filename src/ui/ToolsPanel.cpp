@@ -20,6 +20,11 @@ void ToolsPanel::render() {
         { ToolType::Eraser,     m_icons ? m_icons->eraser     : nullptr, "E", "Eraser (E)"     },
         { ToolType::Fill,       m_icons ? m_icons->fill       : nullptr, "F", "Fill (F)"       },
         { ToolType::Eyedropper, m_icons ? m_icons->eyedropper : nullptr, "I", "Eyedropper (I)" },
+        { ToolType::Line,       m_icons ? m_icons->line       : nullptr, "L", "Line (L)"       },
+        { ToolType::Rectangle,  m_icons ? m_icons->rectangle  : nullptr, "R", "Rectangle (R)"  },
+        { ToolType::Ellipse,    m_icons ? m_icons->ellipse    : nullptr, "O", "Ellipse (O)"    },
+        { ToolType::Select,     m_icons ? m_icons->select     : nullptr, "S", "Select (M)"     },
+        { ToolType::Move,       m_icons ? m_icons->move       : nullptr, "V", "Move (V)"       },
     };
 
     ImVec2 btnSize = {36, 36};
@@ -80,7 +85,8 @@ void ToolsPanel::render() {
     ToolType active = m_toolManager->activeToolType();
     bool showBrush = (
         active == ToolType::Pencil ||
-        active == ToolType::Eraser
+        active == ToolType::Eraser ||
+        active == ToolType::Line
     );
 
     if (showBrush) {
@@ -89,16 +95,23 @@ void ToolsPanel::render() {
         ImGui::Spacing();
 
         int bsize = m_toolManager->brushSize();
-
         ImGui::SetNextItemWidth(ImGui::GetContentRegionAvail().x);
-
-        if (ImGui::SliderInt("##bsize", &bsize, 1, 32, "%d px")) {
+        if (ImGui::SliderInt("##bsize", &bsize, 1, 32, "%d px"))
             m_toolManager->setBrushSize(bsize);
-        }
-
-        if (ImGui::IsItemHovered()) {
+        if (ImGui::IsItemHovered())
             ImGui::SetTooltip("Brush size  ( [ / ] )");
-        }
+    }
+
+    // Rectangle and Ellipse share the filled toggle
+    if (active == ToolType::Rectangle || active == ToolType::Ellipse) {
+        ImGui::Spacing();
+        ImGui::Separator();
+        ImGui::Spacing();
+        bool filled = m_toolManager->rectFilled();
+        if (ImGui::Checkbox("Filled##rect", &filled))
+            m_toolManager->setRectFilled(filled);
+        if (ImGui::IsItemHovered())
+            ImGui::SetTooltip("Hold Shift to toggle while drawing");
     }
 
     ImGui::End();

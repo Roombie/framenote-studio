@@ -1,7 +1,40 @@
 #include "tools/EraserTool.h"
+#include "core/Selection.h"
 #include <cmath>
 
 namespace Framenote {
+namespace {
+
+const Selection* g_selectionClip = nullptr;
+
+class SelectionClipScope {
+public:
+    explicit SelectionClipScope(const Selection* selection)
+        : m_previous(g_selectionClip) {
+        g_selectionClip = selection;
+    }
+
+    ~SelectionClipScope() {
+        g_selectionClip = m_previous;
+    }
+
+private:
+    const Selection* m_previous = nullptr;
+};
+
+bool canModifyPixel(int x, int y) {
+    if (!g_selectionClip || g_selectionClip->isEmpty())
+        return true;
+
+    if (x < 0 || y < 0 ||
+        x >= g_selectionClip->width() ||
+        y >= g_selectionClip->height())
+        return false;
+
+    return g_selectionClip->isSelected(x, y);
+}
+
+} // namespace
 
 void EraserTool::onPress(Document& doc, int frameIndex, const ToolEvent& e) {
     m_erasing = true;
@@ -9,7 +42,10 @@ void EraserTool::onPress(Document& doc, int frameIndex, const ToolEvent& e) {
     m_lastX = static_cast<int>(e.canvasX);
     m_lastY = static_cast<int>(e.canvasY);
 
-    eraseBrush(doc, frameIndex, m_lastX, m_lastY, e.brushSize);
+    {
+        SelectionClipScope clip(e.selection);
+        eraseBrush(doc, frameIndex, m_lastX, m_lastY, e.brushSize);
+    }
 
     doc.markDirty();
 }
@@ -24,7 +60,10 @@ void EraserTool::onDrag(Document& doc, int frameIndex, const ToolEvent& e) {
     int x = static_cast<int>(e.canvasX);
     int y = static_cast<int>(e.canvasY);
 
-    eraseLine(doc, frameIndex, m_lastX, m_lastY, x, y, e.brushSize);
+    {
+        SelectionClipScope clip(e.selection);
+        eraseLine(doc, frameIndex, m_lastX, m_lastY, x, y, e.brushSize);
+    }
 
     m_lastX = x;
     m_lastY = y;
@@ -50,7 +89,13 @@ void EraserTool::eraseBrush(Document& doc, int frameIndex, int x, int y, int siz
 
     for (int dy = -half; dy < size - half; ++dy) {
         for (int dx = -half; dx < size - half; ++dx) {
-            frame.setPixel(x + dx, y + dy, 0x00000000);
+            int px = x + dx;
+            int py = y + dy;
+
+            if (!canModifyPixel(px, py))
+                continue;
+
+            frame.setPixel(px, py, 0x00000000);
         }
     }
 }

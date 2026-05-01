@@ -29,6 +29,11 @@ bool ToolIcons::load(SDL_Renderer* renderer) {
     eraser     = loadPNG(renderer, "assets/icons/eraser_icon.png");
     fill       = loadPNG(renderer, "assets/icons/fill_icon.png");
     eyedropper = loadPNG(renderer, "assets/icons/eyedropper_icon.png");
+    line       = loadPNG(renderer, "assets/icons/line_icon.png");
+    rectangle  = loadPNG(renderer, "assets/icons/rectangle_icon.png");
+    ellipse    = loadPNG(renderer, "assets/icons/ellipse_icon.png");
+    select     = loadPNG(renderer, "assets/icons/select_icon.png");
+    move       = loadPNG(renderer, "assets/icons/move_icon.png");
 
     // Timeline controls
     firstFrame = loadPNG(renderer, "assets/icons/first_frame_icon.png");
@@ -49,6 +54,11 @@ void ToolIcons::destroy() {
     destroyTex(eraser);
     destroyTex(fill);
     destroyTex(eyedropper);
+    destroyTex(line);
+    destroyTex(rectangle);
+    destroyTex(ellipse);
+    destroyTex(select);
+    destroyTex(move);
     destroyTex(firstFrame);
     destroyTex(prevFrame);
     destroyTex(play);

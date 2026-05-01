@@ -4,6 +4,8 @@
 #include "core/Document.h"
 #include "core/Timeline.h"
 #include "core/History.h"
+#include "core/Selection.h"
+#include "core/DocumentTab.h"
 #include "tools/ToolManager.h"
 #include "renderer/CanvasRenderer.h"
 
@@ -20,7 +22,9 @@ public:
             float&          panY,
             History&        history,
             bool&           strokeActive,
-            int&            strokeFrameIndex);
+            int&            strokeFrameIndex,
+            Selection*      selection = nullptr,
+            DocumentTab*    tab       = nullptr);
 
     void render();
 
@@ -39,6 +43,9 @@ private:
 
     bool& m_strokeActive;
     int&  m_strokeFrameIndex;
+
+    Selection*   m_selection = nullptr;
+    DocumentTab* m_tab       = nullptr;
 };
 
 } // namespace Framenote

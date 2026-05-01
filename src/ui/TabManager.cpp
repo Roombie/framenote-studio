@@ -4,6 +4,7 @@
 #include "ui/ToolsPanel.h"
 #include "ui/PalettePanel.h"
 #include "ui/Theme.h"
+#include "core/Selection.h"
 
 #include <cstdlib>
 #include <cstdint>
@@ -33,32 +34,30 @@ static void drawRecentThumbnail(
     ImVec2 thumbSize,
     bool exists
 ) {
-    bool isDark = (Theme::current() == ThemeMode::Dark);
-
     ImVec2 thumbMax = {
         thumbPos.x + thumbSize.x,
         thumbPos.y + thumbSize.y
     };
 
-    // Background
-    ImU32 bgColor = exists
-        ? (isDark ? IM_COL32(35, 35, 42, 255)  : IM_COL32(210, 210, 215, 255))
-        : (isDark ? IM_COL32(55, 35, 35, 255)  : IM_COL32(230, 200, 200, 255));
+    dl->AddRectFilled(
+        thumbPos,
+        thumbMax,
+        exists ? IM_COL32(35, 35, 42, 255) : IM_COL32(55, 35, 35, 255),
+        5.0f
+    );
 
-    dl->AddRectFilled(thumbPos, thumbMax, bgColor, 5.0f);
-
-    // Checkerboard (transparent area indicator)
     float checkerSize = 6.0f;
 
     for (float y = thumbPos.y; y < thumbMax.y; y += checkerSize) {
         for (float x = thumbPos.x; x < thumbMax.x; x += checkerSize) {
             int cx = static_cast<int>((x - thumbPos.x) / checkerSize);
             int cy = static_cast<int>((y - thumbPos.y) / checkerSize);
+
             bool light = ((cx + cy) % 2) == 0;
 
             ImU32 checkerColor = light
-                ? (isDark ? IM_COL32(80, 80, 85, 255)  : IM_COL32(190, 190, 195, 255))
-                : (isDark ? IM_COL32(55, 55, 60, 255)  : IM_COL32(165, 165, 170, 255));
+                ? IM_COL32(80, 80, 85, 255)
+                : IM_COL32(55, 55, 60, 255);
 
             dl->AddRectFilled(
                 {x, y},
@@ -111,7 +110,7 @@ static void drawRecentThumbnail(
                 thumbPos.y + (thumbSize.y - textSize.y) * 0.5f
             },
             exists
-                ? (isDark ? IM_COL32(220, 220, 230, 255) : IM_COL32(50, 50, 60, 255))
+                ? IM_COL32(220, 220, 230, 255)
                 : IM_COL32(255, 120, 120, 255),
             label
         );
@@ -120,9 +119,7 @@ static void drawRecentThumbnail(
     dl->AddRect(
         thumbPos,
         thumbMax,
-        exists
-            ? (isDark ? IM_COL32(95, 98, 115, 255) : IM_COL32(150, 150, 160, 255))
-            : IM_COL32(210, 95, 95, 255),
+        exists ? IM_COL32(95, 98, 115, 255) : IM_COL32(210, 95, 95, 255),
         5.0f,
         0,
         1.5f
@@ -135,8 +132,6 @@ static void drawRecoveryThumbnail(
     ImVec2 thumbPos,
     ImVec2 thumbSize
 ) {
-    bool isDark = (Theme::current() == ThemeMode::Dark);
-
     ImVec2 thumbMax = {
         thumbPos.x + thumbSize.x,
         thumbPos.y + thumbSize.y
@@ -145,7 +140,7 @@ static void drawRecoveryThumbnail(
     dl->AddRectFilled(
         thumbPos,
         thumbMax,
-        isDark ? IM_COL32(35, 35, 42, 255) : IM_COL32(210, 210, 215, 255),
+        IM_COL32(35, 35, 42, 255),
         5.0f
     );
 
@@ -155,11 +150,12 @@ static void drawRecoveryThumbnail(
         for (float x = thumbPos.x; x < thumbMax.x; x += checkerSize) {
             int cx = static_cast<int>((x - thumbPos.x) / checkerSize);
             int cy = static_cast<int>((y - thumbPos.y) / checkerSize);
+
             bool light = ((cx + cy) % 2) == 0;
 
             ImU32 checkerColor = light
-                ? (isDark ? IM_COL32(80, 80, 85, 255)  : IM_COL32(190, 190, 195, 255))
-                : (isDark ? IM_COL32(55, 55, 60, 255)  : IM_COL32(165, 165, 170, 255));
+                ? IM_COL32(80, 80, 85, 255)
+                : IM_COL32(55, 55, 60, 255);
 
             dl->AddRectFilled(
                 {x, y},
@@ -211,7 +207,7 @@ static void drawRecoveryThumbnail(
                 thumbPos.x + (thumbSize.x - textSize.x) * 0.5f,
                 thumbPos.y + (thumbSize.y - textSize.y) * 0.5f
             },
-            isDark ? IM_COL32(220, 220, 230, 255) : IM_COL32(50, 50, 60, 255),
+            IM_COL32(220, 220, 230, 255),
             label
         );
     }
@@ -219,7 +215,7 @@ static void drawRecoveryThumbnail(
     dl->AddRect(
         thumbPos,
         thumbMax,
-        isDark ? IM_COL32(95, 98, 115, 255) : IM_COL32(150, 150, 160, 255),
+        IM_COL32(95, 98, 115, 255),
         5.0f,
         0,
         1.5f
@@ -309,9 +305,6 @@ void TabManager::render(ToolManager& toolManager) {
         m_showNewDialog = false;
     }
 
-    ImGui::SetNextWindowPos(
-        ImGui::GetMainViewport()->GetCenter(),
-        ImGuiCond_Always, {0.5f, 0.5f});
     if (ImGui::BeginPopupModal(
             "New Document##dlg",
             nullptr,
@@ -480,9 +473,6 @@ void TabManager::renderTabBar() {
         if (ImGui::SmallButton(closeId.c_str())) {
             if (m_tabs[i]->document->isDirty()) {
                 m_pendingCloseIndex = i;
-                ImGui::SetNextWindowPos(
-                    ImGui::GetMainViewport()->GetCenter(),
-                    ImGuiCond_Always, {0.5f, 0.5f});
                 ImGui::OpenPopup("Unsaved Changes##close");
             }
             else {
@@ -589,9 +579,6 @@ void TabManager::renderTabBar() {
         m_draggingTab = -1;
     }
 
-    ImGui::SetNextWindowPos(
-        ImGui::GetMainViewport()->GetCenter(),
-        ImGuiCond_Always, {0.5f, 0.5f});
     if (ImGui::BeginPopupModal(
             "Unsaved Changes##close",
             nullptr,
@@ -647,7 +634,8 @@ void TabManager::renderHomeTab(ToolManager& toolManager) {
         ImGuiWindowFlags_NoScrollbar);
     
     bool homeInteractionsBlocked =
-        ImGui::IsPopupOpen("", ImGuiPopupFlags_AnyPopupId);
+        ImGui::IsPopupOpen("Recover Files##home") ||
+        ImGui::IsPopupOpen("Clear Recent Projects##home");
 
     float centerX = io.DisplaySize.x * 0.5f;
     float startY  = io.DisplaySize.y * 0.25f - tabBarH;
@@ -752,17 +740,11 @@ void TabManager::renderHomeTab(ToolManager& toolManager) {
     ImGui::BeginDisabled(m_recentFiles.entries().empty());
 
     if (ImGui::SmallButton("Clear")) {
-        ImGui::SetNextWindowPos(
-            ImGui::GetMainViewport()->GetCenter(),
-            ImGuiCond_Always, {0.5f, 0.5f});
         ImGui::OpenPopup("Clear Recent Projects##home");
     }
 
     ImGui::EndDisabled();
 
-    ImGui::SetNextWindowPos(
-        ImGui::GetMainViewport()->GetCenter(),
-        ImGuiCond_Always, {0.5f, 0.5f});
     if (ImGui::BeginPopupModal(
             "Clear Recent Projects##home",
             nullptr,
@@ -828,24 +810,22 @@ void TabManager::renderHomeTab(ToolManager& toolManager) {
                 !homeInteractionsBlocked &&
                 ImGui::IsMouseHoveringRect(cardMin, cardMax, true);
 
-            bool isDarkCard = (Theme::current() == ThemeMode::Dark);
-
             ImU32 bgColor = exists
-                ? (isDarkCard ? IM_COL32(28, 28, 31, 255)  : IM_COL32(225, 225, 228, 255))
-                : (isDarkCard ? IM_COL32(45, 28, 28, 255)  : IM_COL32(235, 215, 215, 255));
+                ? IM_COL32(28, 28, 31, 255)
+                : IM_COL32(45, 28, 28, 255);
 
             if (cardHovered && exists)
-                bgColor = isDarkCard ? IM_COL32(36, 38, 43, 255) : IM_COL32(212, 214, 220, 255);
+                bgColor = IM_COL32(36, 38, 43, 255);
 
             if (entry.pinned && exists) {
                 bgColor = cardHovered
-                    ? (isDarkCard ? IM_COL32(39, 43, 48, 255) : IM_COL32(205, 215, 225, 255))
-                    : (isDarkCard ? IM_COL32(32, 34, 39, 255) : IM_COL32(215, 220, 230, 255));
+                    ? IM_COL32(39, 43, 48, 255)
+                    : IM_COL32(32, 34, 39, 255);
             }
 
             ImU32 borderColor = exists
-                ? (isDarkCard ? IM_COL32(70, 72, 82, 255)  : IM_COL32(180, 182, 192, 255))
-                : (isDarkCard ? IM_COL32(170, 80, 80, 255) : IM_COL32(200, 130, 130, 255));
+                ? IM_COL32(70, 72, 82, 255)
+                : IM_COL32(170, 80, 80, 255);
 
             if (entry.pinned && exists)
                 borderColor = IM_COL32(44, 184, 213, 210);
@@ -1019,8 +999,7 @@ void TabManager::renderHomeTab(ToolManager& toolManager) {
 
             if (hoveringCardOnly) {
                 if (exists) {
-                    if (!homeInteractionsBlocked)
-                        ImGui::SetTooltip("Open %s", entry.name.c_str());
+                    ImGui::SetTooltip("Open %s", entry.name.c_str());
 
                     if (ImGui::IsMouseClicked(ImGuiMouseButton_Left)) {
                         openPath = entry.path;
@@ -1114,9 +1093,6 @@ void TabManager::renderHomeTab(ToolManager& toolManager) {
         m_showRecoverDialog = false;
     }
 
-    ImGui::SetNextWindowPos(
-        ImGui::GetMainViewport()->GetCenter(),
-        ImGuiCond_Always, {0.5f, 0.5f});
     if (ImGui::BeginPopupModal(
             "Recover Files##home",
             nullptr,
@@ -1353,7 +1329,9 @@ void TabManager::renderDocumentTab(DocumentTab& tab, ToolManager& toolManager) {
         tab.canvasPanY,
         *tab.history,
         tab.canvasStrokeActive,
-        tab.canvasStrokeFrameIndex
+        tab.canvasStrokeFrameIndex,
+        tab.selection.get(),
+        &tab
     ).render();
 }
 
@@ -1429,6 +1407,10 @@ void TabManager::openDocument(
     tab->history  = std::make_unique<History>();
     tab->renderer = std::make_unique<CanvasRenderer>(
         m_sdlRenderer,
+        tab->document->canvasSize().width,
+        tab->document->canvasSize().height
+    );
+    tab->selection = std::make_unique<Selection>(
         tab->document->canvasSize().width,
         tab->document->canvasSize().height
     );

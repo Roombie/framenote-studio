@@ -27,6 +27,12 @@ set(SOURCES
     src/tools/EraserTool.cpp
     src/tools/FillTool.cpp
     src/tools/EyedropperTool.cpp
+    src/tools/LineTool.cpp
+    src/tools/RectangleTool.cpp
+    src/tools/EllipseTool.cpp
+    src/tools/SelectionTool.cpp
+    src/tools/MoveTool.cpp
+    src/core/Selection.cpp
 
     # Renderer
     src/renderer/CanvasRenderer.cpp

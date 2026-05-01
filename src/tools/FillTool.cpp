@@ -1,12 +1,31 @@
 #include "tools/FillTool.h"
+#include "core/Selection.h"
 #include <queue>
 
 namespace Framenote {
+namespace {
+
+bool canModifyPixel(const ToolEvent& e, int x, int y) {
+    if (!e.selection || e.selection->isEmpty())
+        return true;
+
+    if (x < 0 || y < 0 ||
+        x >= e.selection->width() ||
+        y >= e.selection->height())
+        return false;
+
+    return e.selection->isSelected(x, y);
+}
+
+} // namespace
 
 void FillTool::onPress(Document& doc, int frameIndex, const ToolEvent& e) {
     auto& frame = doc.frame(frameIndex);
     int x = static_cast<int>(e.canvasX);
     int y = static_cast<int>(e.canvasY);
+
+    if (!canModifyPixel(e, x, y))
+        return;
 
     uint32_t targetColor = frame.getPixel(x, y);
     uint32_t fillColor =
@@ -14,10 +33,10 @@ void FillTool::onPress(Document& doc, int frameIndex, const ToolEvent& e) {
             ? doc.palette().secondaryColor().toRGBA()
             : doc.palette().primaryColor().toRGBA();
 
-    if (targetColor == fillColor) return; // nothing to do
+    if (targetColor == fillColor)
+        return;
 
-    // BFS flood fill — iterative to avoid stack overflow on large canvases
-    std::queue<std::pair<int,int>> queue;
+    std::queue<std::pair<int, int>> queue;
     queue.push({x, y});
 
     int w = frame.width();
@@ -27,8 +46,14 @@ void FillTool::onPress(Document& doc, int frameIndex, const ToolEvent& e) {
         auto [cx, cy] = queue.front();
         queue.pop();
 
-        if (cx < 0 || cx >= w || cy < 0 || cy >= h) continue;
-        if (frame.getPixel(cx, cy) != targetColor)   continue;
+        if (cx < 0 || cx >= w || cy < 0 || cy >= h)
+            continue;
+
+        if (!canModifyPixel(e, cx, cy))
+            continue;
+
+        if (frame.getPixel(cx, cy) != targetColor)
+            continue;
 
         frame.setPixel(cx, cy, fillColor);
 

@@ -1,4 +1,5 @@
 #include "core/DocumentTab.h"
+#include "core/Selection.h"
 
 namespace Framenote {
 
@@ -15,8 +16,9 @@ std::unique_ptr<DocumentTab> DocumentTab::createBlank(
     tab->timeline = std::make_unique<Timeline>();
     tab->timeline->setFrameCount(1);
     tab->timeline->setFps(fps);
-    tab->history  = std::make_unique<History>();
-    tab->renderer = std::make_unique<CanvasRenderer>(sdlRenderer, w, h);
+    tab->history   = std::make_unique<History>();
+    tab->renderer  = std::make_unique<CanvasRenderer>(sdlRenderer, w, h);
+    tab->selection = std::make_unique<Selection>(w, h);
     return tab;
 }
 

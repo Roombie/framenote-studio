@@ -1,4 +1,4 @@
-#include "tools/PencilTool.h"
+#include "tools/LineTool.h"
 #include "core/Selection.h"
 #include <cmath>
 
@@ -36,72 +36,70 @@ bool canModifyPixel(int x, int y) {
 
 } // namespace
 
-void PencilTool::onPress(Document& doc, int frameIndex, const ToolEvent& e) {
+void LineTool::onPress(Document& doc, int frameIndex, const ToolEvent& e) {
     m_drawing = true;
-    m_lastX   = static_cast<int>(e.canvasX);
-    m_lastY   = static_cast<int>(e.canvasY);
+    m_startX  = static_cast<int>(e.canvasX);
+    m_startY  = static_cast<int>(e.canvasY);
+    m_endX    = m_startX;
+    m_endY    = m_startY;
+    m_color   = (e.rightDown && !e.leftDown)
+        ? doc.palette().secondaryColor().toRGBA()
+        : doc.palette().primaryColor().toRGBA();
 
-    m_drawColor =
-        (e.rightDown && !e.leftDown)
-            ? doc.palette().secondaryColor().toRGBA()
-            : doc.palette().primaryColor().toRGBA();
-
-    {
-        SelectionClipScope clip(e.selection);
-        drawBrush(doc, frameIndex, m_lastX, m_lastY, e.brushSize);
-    }
-
-    doc.markDirty();
+    (void)doc;
+    (void)frameIndex;
 }
 
-void PencilTool::onDrag(Document& doc, int frameIndex, const ToolEvent& e) {
+void LineTool::onDrag(Document& doc, int frameIndex, const ToolEvent& e) {
     if (!m_drawing)
         return;
 
-    int x = static_cast<int>(e.canvasX);
-    int y = static_cast<int>(e.canvasY);
+    m_endX = static_cast<int>(e.canvasX);
+    m_endY = static_cast<int>(e.canvasY);
+
+    (void)doc;
+    (void)frameIndex;
+}
+
+void LineTool::onRelease(Document& doc, int frameIndex, const ToolEvent& e) {
+    if (!m_drawing)
+        return;
+
+    m_endX    = static_cast<int>(e.canvasX);
+    m_endY    = static_cast<int>(e.canvasY);
+    m_drawing = false;
 
     {
         SelectionClipScope clip(e.selection);
-        drawLine(doc, frameIndex, m_lastX, m_lastY, x, y, e.brushSize);
+        drawLine(doc, frameIndex, m_startX, m_startY, m_endX, m_endY,
+                 e.brushSize, m_color);
     }
-
-    m_lastX = x;
-    m_lastY = y;
 
     doc.markDirty();
 }
 
-void PencilTool::onRelease(Document& doc, int frameIndex, const ToolEvent& e) {
-    (void)doc;
-    (void)frameIndex;
-    (void)e;
-
-    m_drawing = false;
-    m_lastX   = -1;
-    m_lastY   = -1;
-}
-
-void PencilTool::drawBrush(Document& doc, int frameIndex, int x, int y, int size) {
+void LineTool::drawBrush(Document& doc, int frameIndex,
+                         int x, int y, int brushSize, uint32_t color) {
     auto& frame = doc.frame(frameIndex);
 
-    int half = size / 2;
+    int half = brushSize / 2;
 
-    for (int dy = -half; dy < size - half; ++dy) {
-        for (int dx = -half; dx < size - half; ++dx) {
+    for (int dy = -half; dy < brushSize - half; ++dy) {
+        for (int dx = -half; dx < brushSize - half; ++dx) {
             int px = x + dx;
             int py = y + dy;
 
             if (!canModifyPixel(px, py))
                 continue;
 
-            frame.setPixel(px, py, m_drawColor);
+            frame.setPixel(px, py, color);
         }
     }
 }
 
-void PencilTool::drawLine(Document& doc, int frameIndex,
-                          int x0, int y0, int x1, int y1, int size) {
+void LineTool::drawLine(Document& doc, int frameIndex,
+                        int x0, int y0, int x1, int y1,
+                        int brushSize, uint32_t color) {
     int dx =  std::abs(x1 - x0);
     int dy = -std::abs(y1 - y0);
 
@@ -111,7 +109,7 @@ void PencilTool::drawLine(Document& doc, int frameIndex,
     int err = dx + dy;
 
     while (true) {
-        drawBrush(doc, frameIndex, x0, y0, size);
+        drawBrush(doc, frameIndex, x0, y0, brushSize, color);
 
         if (x0 == x1 && y0 == y1)
             break;

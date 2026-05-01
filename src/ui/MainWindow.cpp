@@ -67,7 +67,6 @@ void MainWindow::renderErrorDialog() {
         ImGui::OpenPopup("Error##errDlg");
         m_showErrorDialog = false;
     }
-
     ImGui::SetNextWindowPos(
         ImGui::GetMainViewport()->GetCenter(),
         ImGuiCond_Always, {0.5f, 0.5f});
@@ -87,12 +86,10 @@ void MainWindow::renderErrorDialog() {
 bool MainWindow::doSave(DocumentTab* tab, const std::string& path) {
     std::string err;
     if (FileManager::save(*tab->document, path, err)) {
-        // FileManager may have appended .framenote — use the canonical path
         std::string finalPath = path;
         if (finalPath.size() < 11 ||
             finalPath.substr(finalPath.size() - 11) != ".framenote")
             finalPath += ".framenote";
-
         tab->document->setFilePath(finalPath);
         tab->document->clearDirty();
         tab->name = finalPath.substr(finalPath.find_last_of("/\\") + 1);
@@ -139,7 +136,7 @@ void MainWindow::render() {
                     }
 
                 } else {
-                    showError("Open failed:\n" + err);
+                    m_statusMsg = "Open failed: " + err;
                 }
             }
         }
@@ -151,10 +148,23 @@ void MainWindow::render() {
                 if (tab->document->filePath().empty()) {
                     std::string path = FileDialog::saveFile(
                         FILTER_FRAMENOTE, "framenote", "Save Framenote File");
-                    if (!path.empty())
-                        doSave(tab, path);
+                    if (!path.empty()) {
+                        std::string err;
+                        if (FileManager::save(*tab->document, path, err)) {
+                            tab->document->setFilePath(path);
+                            tab->document->clearDirty();
+                            tab->name = path.substr(path.find_last_of("/\\") + 1);
+                            m_statusMsg = "Saved!";
+                            m_tabManager->recordRecentFile(path, *tab->document);
+                        }
+                    }
                 } else {
-                    doSave(tab, tab->document->filePath());
+                    std::string err;
+                    if (FileManager::save(*tab->document, tab->document->filePath(), err)) {
+                        tab->document->clearDirty();
+                        m_statusMsg = "Saved!";
+                        m_tabManager->recordRecentFile(tab->document->filePath(), *tab->document);
+                    }
                 }
             }
         }
@@ -165,8 +175,16 @@ void MainWindow::render() {
             if (tab) {
                 std::string path = FileDialog::saveFile(
                     FILTER_FRAMENOTE, "framenote", "Save As");
-                if (!path.empty())
-                    doSave(tab, path);
+                if (!path.empty()) {
+                    std::string err;
+                    if (FileManager::save(*tab->document, path, err)) {
+                        tab->document->setFilePath(path);
+                        tab->document->clearDirty();
+                        tab->name = path.substr(path.find_last_of("/\\") + 1);
+                        m_statusMsg = "Saved!";
+                        m_tabManager->recordRecentFile(path, *tab->document);
+                    }
+                }
             }
         }
 
@@ -237,7 +255,7 @@ void MainWindow::renderMenuBar() {
                         }
 
                     } else {
-                        showError("Open failed:\n" + err);
+                        m_statusMsg = "Open failed: " + err;
                     }
                 }
             }
@@ -250,10 +268,25 @@ void MainWindow::renderMenuBar() {
                 if (tab->document->filePath().empty()) {
                     std::string path = FileDialog::saveFile(
                         FILTER_FRAMENOTE, "framenote", "Save Framenote File");
-                    if (!path.empty())
-                        doSave(tab, path);
+                    if (!path.empty()) {
+                        std::string err;
+                        if (FileManager::save(*tab->document, path, err)) {
+                            tab->document->setFilePath(path);
+                            tab->document->clearDirty();
+                            tab->name = path.substr(path.find_last_of("/\\") + 1);
+                            m_statusMsg = "Saved!";
+                            m_tabManager->recordRecentFile(path, *tab->document);
+                        } else {
+                            m_statusMsg = "Save failed: " + err;
+                        }
+                    }
                 } else {
-                    doSave(tab, tab->document->filePath());
+                    std::string err;
+                    if (FileManager::save(*tab->document, tab->document->filePath(), err)) {
+                        tab->document->clearDirty();
+                        m_statusMsg = "Saved!";
+                        m_tabManager->recordRecentFile(tab->document->filePath(), *tab->document);
+                    }
                 }
             }
             ImGui::EndDisabled();
@@ -263,8 +296,18 @@ void MainWindow::renderMenuBar() {
             if (ImGui::MenuItem("Save As...", "Ctrl+Shift+S")) {
                 std::string path = FileDialog::saveFile(
                     FILTER_FRAMENOTE, "framenote", "Save As");
-                if (!path.empty())
-                    doSave(tab, path);
+                if (!path.empty()) {
+                    std::string err;
+                    if (FileManager::save(*tab->document, path, err)) {
+                        tab->document->setFilePath(path);
+                        tab->document->clearDirty();
+                        tab->name = path.substr(path.find_last_of("/\\") + 1);
+                        m_statusMsg = "Saved!";
+                        m_tabManager->recordRecentFile(path, *tab->document);
+                    } else {
+                        m_statusMsg = "Save failed: " + err;
+                    }
+                }
             }
             ImGui::EndDisabled();
 
@@ -409,49 +452,143 @@ void MainWindow::renderMenuBar() {
 }
 
 void MainWindow::renderExportDialog() {
-    if (!m_showExportDialog) return;
-
-    auto* tab = m_tabManager->activeTab();
-    if (!tab) { m_showExportDialog = false; return; }
-
-    std::string err;
-
-    if (m_exportType == ExportType::GIF) {
-        std::string path = FileDialog::saveFile(FILTER_GIF, "gif", "Export as GIF");
-        if (!path.empty()) {
-            GifExporter::Options opts;
-            opts.fps = tab->timeline->fps();
-            if (GifExporter::exportGif(*tab->document, path, opts, err))
-                m_statusMsg = "GIF exported!";
-            else
-                showError("Export failed:\n" + err);
+    if (m_showExportDialog) {
+        // Seed settings from document when dialog opens
+        auto* tab = m_tabManager->activeTab();
+        if (tab) {
+            m_exportFps  = tab->timeline->fps();
+            m_exportLoop = tab->timeline->looping();
         }
+        ImGui::SetNextWindowPos(
+            ImGui::GetMainViewport()->GetCenter(),
+            ImGuiCond_Always, {0.5f, 0.5f});
+        ImGui::OpenPopup("Export##settingsDlg");
+        m_showExportDialog = false;
     }
-    else if (m_exportType == ExportType::PNG) {
-        std::string path = FileDialog::saveFile(FILTER_PNG, "png", "Export Frame as PNG");
-        if (!path.empty()) {
+
+    ImGui::SetNextWindowPos(
+        ImGui::GetMainViewport()->GetCenter(),
+        ImGuiCond_Always, {0.5f, 0.5f});
+    ImGui::SetNextWindowSizeConstraints({340, 0}, {480, 600});
+
+    if (ImGui::BeginPopupModal("Export##settingsDlg", nullptr,
+            ImGuiWindowFlags_AlwaysAutoResize)) {
+
+        auto* tab = m_tabManager->activeTab();
+        if (!tab) { ImGui::CloseCurrentPopup(); ImGui::EndPopup(); return; }
+
+        int cw = tab->document->canvasSize().width;
+        int ch = tab->document->canvasSize().height;
+
+        const char* typeName = m_exportType == ExportType::GIF
+            ? "Export as GIF"
+            : m_exportType == ExportType::PNG
+                ? "Export Frame as PNG"
+                : "Export PNG Sequence";
+
+        ImGui::TextUnformatted(typeName);
+        ImGui::Separator();
+        ImGui::Spacing();
+
+        // Scale
+        ImGui::Text("Scale:");
+        ImGui::SameLine();
+        if (ImGui::RadioButton("1x##sc", m_exportScale == 1)) m_exportScale = 1;
+        ImGui::SameLine();
+        if (ImGui::RadioButton("2x##sc", m_exportScale == 2)) m_exportScale = 2;
+        ImGui::SameLine();
+        if (ImGui::RadioButton("4x##sc", m_exportScale == 4)) m_exportScale = 4;
+        ImGui::SameLine();
+        if (ImGui::RadioButton("8x##sc", m_exportScale == 8)) m_exportScale = 8;
+
+        ImGui::TextDisabled("Output: %d x %d px",
+            cw * m_exportScale, ch * m_exportScale);
+        ImGui::Spacing();
+
+        // GIF-specific
+        if (m_exportType == ExportType::GIF) {
+            ImGui::SetNextItemWidth(120);
+            ImGui::SliderInt("FPS##exp", &m_exportFps, 1, 60);
+            if (m_exportFps < 1) m_exportFps = 1;
+            ImGui::SameLine();
+            ImGui::TextDisabled("(doc: %d)", tab->timeline->fps());
+            ImGui::Checkbox("Loop##exp", &m_exportLoop);
+            ImGui::Spacing();
+            int frameCount = tab->document->frameCount();
+            float duration = frameCount / (float)m_exportFps;
+            ImGui::TextDisabled("%d frame%s  •  %.2f sec",
+                frameCount, frameCount == 1 ? "" : "s", duration);
+            ImGui::Spacing();
+        }
+
+        if (m_exportType == ExportType::PNG) {
             int fi = tab->timeline->currentFrame();
-            if (PngExporter::exportFrame(*tab->document, fi, path, err))
-                m_statusMsg = "PNG exported!";
-            else
-                showError("Export failed:\n" + err);
+            ImGui::TextDisabled("Exporting frame %d of %d",
+                fi + 1, tab->document->frameCount());
+            ImGui::Spacing();
         }
-    }
-    else if (m_exportType == ExportType::PNGSequence) {
-        std::string path = FileDialog::saveFile(FILTER_PNG, "png",
-            "Export PNG Sequence (choose base name)");
-        if (!path.empty()) {
-            std::string base = path;
-            if (base.size() > 4 && base.substr(base.size()-4) == ".png")
-                base = base.substr(0, base.size()-4);
-            if (PngExporter::exportSequence(*tab->document, base, err))
-                m_statusMsg = "PNG sequence exported!";
-            else
-                showError("Export failed:\n" + err);
-        }
-    }
 
-    m_showExportDialog = false;
+        if (m_exportType == ExportType::PNGSequence) {
+            ImGui::TextDisabled("Exporting %d frame%s as numbered PNGs",
+                tab->document->frameCount(),
+                tab->document->frameCount() == 1 ? "" : "s");
+            ImGui::Spacing();
+        }
+
+        ImGui::Separator();
+        ImGui::Spacing();
+
+        float btnW = (ImGui::GetContentRegionAvail().x -
+                      ImGui::GetStyle().ItemSpacing.x) / 2.0f;
+
+        if (ImGui::Button("Export##go", {btnW, 0})) {
+            ImGui::CloseCurrentPopup();
+
+            std::string err;
+            if (m_exportType == ExportType::GIF) {
+                std::string path = FileDialog::saveFile(FILTER_GIF, "gif", "Export as GIF");
+                if (!path.empty()) {
+                    GifExporter::Options opts;
+                    opts.fps   = m_exportFps;
+                    opts.loop  = m_exportLoop;
+                    opts.scale = m_exportScale;
+                    if (GifExporter::exportGif(*tab->document, path, opts, err))
+                        m_statusMsg = "GIF exported!";
+                    else
+                        showError("Export failed:\n" + err);
+                }
+            }
+            else if (m_exportType == ExportType::PNG) {
+                std::string path = FileDialog::saveFile(FILTER_PNG, "png", "Export Frame as PNG");
+                if (!path.empty()) {
+                    int fi = tab->timeline->currentFrame();
+                    if (PngExporter::exportFrame(*tab->document, fi, path, err, m_exportScale))
+                        m_statusMsg = "PNG exported!";
+                    else
+                        showError("Export failed:\n" + err);
+                }
+            }
+            else if (m_exportType == ExportType::PNGSequence) {
+                std::string path = FileDialog::saveFile(FILTER_PNG, "png",
+                    "Export PNG Sequence (choose base name)");
+                if (!path.empty()) {
+                    std::string base = path;
+                    if (base.size() > 4 && base.substr(base.size()-4) == ".png")
+                        base = base.substr(0, base.size()-4);
+                    if (PngExporter::exportSequence(*tab->document, base, err, m_exportScale))
+                        m_statusMsg = "PNG sequence exported!";
+                    else
+                        showError("Export failed:\n" + err);
+                }
+            }
+        }
+
+        ImGui::SameLine();
+        if (ImGui::Button("Cancel##exp", {btnW, 0}))
+            ImGui::CloseCurrentPopup();
+
+        ImGui::EndPopup();
+    }
 }
 
 void MainWindow::renderCanvasSizeDialog() {

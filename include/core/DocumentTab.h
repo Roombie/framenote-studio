@@ -7,6 +7,7 @@
 #include "core/Document.h"
 #include "core/Timeline.h"
 #include "core/History.h"
+#include "core/Selection.h"
 #include "renderer/CanvasRenderer.h"
 
 namespace Framenote {
@@ -17,6 +18,7 @@ struct DocumentTab {
     std::unique_ptr<Timeline>        timeline;
     std::unique_ptr<History>         history;
     std::unique_ptr<CanvasRenderer>  renderer;
+    std::unique_ptr<Selection>       selection;
 
     bool requestClose = false;
 
@@ -38,6 +40,16 @@ struct DocumentTab {
     bool paletteGestureSelecting = false;
     bool paletteGestureStartedOnSelected = false;
     int  paletteGestureStartIndex = -1;
+
+    // Floating selection (Move tool) — pixels lifted off the canvas
+    bool                   hasFloating    = false;
+    int                    floatOffsetX   = 0;
+    int                    floatOffsetY   = 0;
+    int                    floatStartX    = 0;
+    int                    floatStartY    = 0;
+    int                    floatW         = 0;
+    int                    floatH         = 0;
+    std::vector<uint8_t>   floatPixels;   // BGRA, floatW * floatH * 4
 
     // Recovery/autosave state — persisted only during the app session
     std::string recoveryId;
