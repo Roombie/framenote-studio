@@ -369,6 +369,211 @@ void CanvasPanel::render() {
         }
     }
 
+    // ── Shape tool previews ───────────────────────────────────────────────────
+    // These are only visual previews while dragging.
+    // The real pixels are written by each tool onRelease().
+    {
+        auto drawPreviewBrushPixel = [&](int x, int y, int brushSize, ImU32 color) {
+            int half = brushSize / 2;
+
+            for (int by = -half; by < brushSize - half; ++by) {
+                for (int bx = -half; bx < brushSize - half; ++bx) {
+                    int px = x + bx;
+                    int py = y + by;
+
+                    if (px < 0 || py < 0 || px >= cw || py >= ch)
+                        continue;
+
+                    float sx0 = originX + px * m_zoom;
+                    float sy0 = originY + py * m_zoom;
+
+                    dl->AddRectFilled(
+                        {sx0, sy0},
+                        {sx0 + m_zoom, sy0 + m_zoom},
+                        color
+                    );
+                }
+            }
+        };
+
+        auto drawPreviewLinePixels = [&](int x0, int y0, int x1, int y1,
+                                         int brushSize, ImU32 color) {
+            int dx =  std::abs(x1 - x0);
+            int dy = -std::abs(y1 - y0);
+
+            int sx = x0 < x1 ? 1 : -1;
+            int sy = y0 < y1 ? 1 : -1;
+
+            int err = dx + dy;
+
+            while (true) {
+                drawPreviewBrushPixel(x0, y0, brushSize, color);
+
+                if (x0 == x1 && y0 == y1)
+                    break;
+
+                int e2 = 2 * err;
+
+                if (e2 >= dy) {
+                    err += dy;
+                    x0 += sx;
+                }
+
+                if (e2 <= dx) {
+                    err += dx;
+                    y0 += sy;
+                }
+            }
+        };
+
+        auto drawPreviewRectPixels = [&](int x0, int y0, int x1, int y1,
+                                         bool filled, ImU32 color) {
+            int left   = std::min(x0, x1);
+            int right  = std::max(x0, x1);
+            int top    = std::min(y0, y1);
+            int bottom = std::max(y0, y1);
+
+            for (int y = top; y <= bottom; ++y) {
+                for (int x = left; x <= right; ++x) {
+                    bool edge =
+                        x == left || x == right ||
+                        y == top  || y == bottom;
+
+                    if (!filled && !edge)
+                        continue;
+
+                    if (x < 0 || y < 0 || x >= cw || y >= ch)
+                        continue;
+
+                    float sx0 = originX + x * m_zoom;
+                    float sy0 = originY + y * m_zoom;
+
+                    dl->AddRectFilled(
+                        {sx0, sy0},
+                        {sx0 + m_zoom, sy0 + m_zoom},
+                        color
+                    );
+                }
+            }
+        };
+
+        auto drawPreviewEllipsePixels = [&](int x0, int y0, int x1, int y1,
+                                            bool filled, ImU32 color) {
+            int left   = std::min(x0, x1);
+            int right  = std::max(x0, x1);
+            int top    = std::min(y0, y1);
+            int bottom = std::max(y0, y1);
+
+            float cx = (left + right) * 0.5f;
+            float cy = (top + bottom) * 0.5f;
+
+            float rx = std::max(0.5f, (right - left + 1) * 0.5f);
+            float ry = std::max(0.5f, (bottom - top + 1) * 0.5f);
+
+            for (int y = top; y <= bottom; ++y) {
+                for (int x = left; x <= right; ++x) {
+                    if (x < 0 || y < 0 || x >= cw || y >= ch)
+                        continue;
+
+                    float nx = (x - cx) / rx;
+                    float ny = (y - cy) / ry;
+                    float d = nx * nx + ny * ny;
+
+                    bool draw = false;
+
+                    if (filled) {
+                        draw = d <= 1.0f;
+                    } else {
+                        // Approximate outline thickness in normalized ellipse space.
+                        float innerRx = std::max(0.5f, rx - 1.0f);
+                        float innerRy = std::max(0.5f, ry - 1.0f);
+
+                        float inx = (x - cx) / innerRx;
+                        float iny = (y - cy) / innerRy;
+                        float innerD = inx * inx + iny * iny;
+
+                        draw = d <= 1.0f && innerD >= 1.0f;
+                    }
+
+                    if (!draw)
+                        continue;
+
+                    float sx0 = originX + x * m_zoom;
+                    float sy0 = originY + y * m_zoom;
+
+                    dl->AddRectFilled(
+                        {sx0, sy0},
+                        {sx0 + m_zoom, sy0 + m_zoom},
+                        color
+                    );
+                }
+            }
+        };
+
+        Color previewColor =
+            (io.MouseDown[1] && !io.MouseDown[0])
+                ? m_document->palette().secondaryColor()
+                : m_document->palette().primaryColor();
+
+        ImU32 previewFill = IM_COL32(
+            previewColor.r,
+            previewColor.g,
+            previewColor.b,
+            180
+        );
+
+        ToolType activeTool = m_toolManager->activeToolType();
+
+        if (activeTool == ToolType::Line) {
+            auto* lineTool = static_cast<LineTool*>(
+                m_toolManager->getTool(ToolType::Line)
+            );
+
+            if (lineTool && lineTool->isDrawing()) {
+                drawPreviewLinePixels(
+                    lineTool->startX(),
+                    lineTool->startY(),
+                    lineTool->endX(),
+                    lineTool->endY(),
+                    m_toolManager->brushSize(),
+                    previewFill
+                );
+            }
+        }
+        else if (activeTool == ToolType::Rectangle) {
+            auto* rectTool = static_cast<RectangleTool*>(
+                m_toolManager->getTool(ToolType::Rectangle)
+            );
+
+            if (rectTool && rectTool->isDrawing()) {
+                drawPreviewRectPixels(
+                    rectTool->startX(),
+                    rectTool->startY(),
+                    rectTool->endX(),
+                    rectTool->endY(),
+                    rectTool->filled(),
+                    previewFill
+                );
+            }
+        }
+        else if (activeTool == ToolType::Ellipse) {
+            auto* ellipseTool = static_cast<EllipseTool*>(
+                m_toolManager->getTool(ToolType::Ellipse)
+            );
+
+            if (ellipseTool && ellipseTool->isDrawing()) {
+                drawPreviewEllipsePixels(
+                    ellipseTool->startX(),
+                    ellipseTool->startY(),
+                    ellipseTool->endX(),
+                    ellipseTool->endY(),
+                    m_toolManager->rectFilled(),
+                    previewFill
+                );
+            }
+        }
+    }
+
     dl->PopClipRect();
 
     // ── Rubber band selection preview ─────────────────────────────────────────
@@ -454,7 +659,10 @@ void CanvasPanel::render() {
 
         bool showCursor =
             activeTool == ToolType::Pencil ||
-            activeTool == ToolType::Eraser;
+            activeTool == ToolType::Eraser ||
+            activeTool == ToolType::Line ||
+            activeTool == ToolType::Rectangle ||
+            activeTool == ToolType::Ellipse;
 
         if (showCursor) {
             int bsize = m_toolManager->brushSize();
@@ -468,7 +676,10 @@ void CanvasPanel::render() {
             float rx1 = originX + (px - half + bsize) * m_zoom;
             float ry1 = originY + (py - half + bsize) * m_zoom;
 
-            if (activeTool == ToolType::Pencil) {
+            if (activeTool == ToolType::Pencil ||
+                activeTool == ToolType::Line ||
+                activeTool == ToolType::Rectangle ||
+                activeTool == ToolType::Ellipse) {
                 Color c =
                     (io.MouseDown[1] && !io.MouseDown[0])
                         ? m_document->palette().secondaryColor()
@@ -796,6 +1007,18 @@ void CanvasPanel::render() {
     // ── Drawing / tools ───────────────────────────────────────────────────────
     {
         Tool* tool = m_toolManager->activeTool();
+        ToolType activeTool = m_toolManager->activeToolType();
+
+        bool isFreehandTool =
+            activeTool == ToolType::Pencil ||
+            activeTool == ToolType::Eraser;
+
+        bool isDragOutsideTool =
+            activeTool == ToolType::Line ||
+            activeTool == ToolType::Rectangle ||
+            activeTool == ToolType::Ellipse ||
+            activeTool == ToolType::Select ||
+            activeTool == ToolType::Move;
 
         auto makeToolEvent = [&]() {
             float relX = (mp.x - originX) / canvasW;
@@ -804,6 +1027,7 @@ void CanvasPanel::render() {
             int px = static_cast<int>(relX * cw);
             int py = static_cast<int>(relY * ch);
 
+            // Clamp coordinates so drag-outside tools can keep previewing safely.
             if (px < 0) px = 0;
             if (py < 0) py = 0;
             if (px >= cw) px = cw - 1;
@@ -829,7 +1053,14 @@ void CanvasPanel::render() {
             !popupOpen &&
             !imguiCapturing;
 
-        if (tool && m_strokeActive && (!drawingMouseDown || !canDraw || !rawInCanvas)) {
+        bool shouldStopStroke =
+            !drawingMouseDown ||
+            !canDraw ||
+            (isFreehandTool && !rawInCanvas);
+
+        // Stop freehand tools when leaving the canvas.
+        // Do not stop shape/move/selection tools when leaving the canvas.
+        if (tool && m_strokeActive && shouldStopStroke) {
             ToolEvent e = makeToolEvent();
 
             int releaseFrame =
@@ -843,27 +1074,36 @@ void CanvasPanel::render() {
             m_strokeFrameIndex = -1;
         }
 
-        if (tool && rawInCanvas && canDraw && drawingMouseDown) {
+        if (tool && canDraw && drawingMouseDown) {
             int fi = m_timeline->currentFrame();
-            ToolEvent e = makeToolEvent();
 
             if (!m_strokeActive) {
-                auto& f = m_document->frame(fi);
+                // Always start only from inside the real canvas.
+                if (rawInCanvas) {
+                    ToolEvent e = makeToolEvent();
 
-                Snapshot snap;
-                snap.frameIndex = fi;
-                snap.bufferWidth = f.bufferWidth();
-                snap.bufferHeight = f.bufferHeight();
-                snap.pixels = f.pixels();
+                    auto& f = m_document->frame(fi);
 
-                m_history.push(std::move(snap));
+                    Snapshot snap;
+                    snap.frameIndex = fi;
+                    snap.bufferWidth = f.bufferWidth();
+                    snap.bufferHeight = f.bufferHeight();
+                    snap.pixels = f.pixels();
 
-                m_strokeActive = true;
-                m_strokeFrameIndex = fi;
+                    m_history.push(std::move(snap));
 
-                tool->onPress(*m_document, fi, e);
+                    m_strokeActive = true;
+                    m_strokeFrameIndex = fi;
+
+                    tool->onPress(*m_document, fi, e);
+                }
             } else {
-                tool->onDrag(*m_document, fi, e);
+                // Freehand tools only continue inside the canvas.
+                // Shape/move/selection tools continue even outside using clamped coords.
+                if (rawInCanvas || isDragOutsideTool) {
+                    ToolEvent e = makeToolEvent();
+                    tool->onDrag(*m_document, fi, e);
+                }
             }
         }
     }
