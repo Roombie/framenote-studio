@@ -226,11 +226,9 @@ static bool readHexColor(const std::string& hex, Color& outColor) {
 bool FileManager::save(const Document& doc,
                        const std::string& path,
                        std::string& outError) {
-    // Enforce .framenote extension
-    std::string finalPath = path;
-    if (finalPath.size() < 11 ||
-        finalPath.substr(finalPath.size() - 11) != ".framenote") {
-        finalPath += ".framenote";
+    if (path.empty()) {
+        outError = "No output path provided.";
+        return false;
     }
 
     json j;
@@ -242,50 +240,73 @@ bool FileManager::save(const Document& doc,
 
     // Palette
     json palette = json::array();
+
     for (int i = 0; i < doc.palette().size(); ++i) {
         Color c = doc.palette().color(i);
+
         char hex[10];
-        std::snprintf(hex, sizeof(hex), "#%02X%02X%02X%02X",
-                      c.r, c.g, c.b, c.a);
+
+        std::snprintf(
+            hex,
+            sizeof(hex),
+            "#%02X%02X%02X%02X",
+            c.r,
+            c.g,
+            c.b,
+            c.a
+        );
+
         palette.push_back(std::string(hex));
     }
+
     j["palette"] = palette;
 
     // Frames — each encoded as base64 PNG
     json frames = json::array();
+
     for (int i = 0; i < doc.frameCount(); ++i) {
         auto png = encodePNG(doc.frame(i));
+
         if (png.empty()) {
             outError = "Failed to encode frame " + std::to_string(i) + " as PNG";
             return false;
         }
-        frames.push_back({{"pixels", base64Encode(png)}});
+
+        frames.push_back({
+            {"pixels", base64Encode(png)}
+        });
     }
+
     j["frames"] = frames;
 
     // Atomic save: write to a temp file first, then rename.
     // This ensures a failed write never corrupts the existing file.
-    std::string tmpPath = finalPath + ".tmp";
+    std::string tmpPath = path + ".tmp";
 
     {
         std::ofstream tmp(tmpPath, std::ios::binary | std::ios::trunc);
+
         if (!tmp.is_open()) {
             outError = "Cannot open temp file for writing: " + tmpPath;
             return false;
         }
+
         tmp << j.dump(2);
+
         if (!tmp.good()) {
             tmp.close();
             std::remove(tmpPath.c_str());
+
             outError = "Failed while writing file: " + tmpPath;
             return false;
         }
-    } // flush and close before rename
+    }
 
-    // Replace the target file atomically
-    if (std::rename(tmpPath.c_str(), finalPath.c_str()) != 0) {
+    // Replace the target file atomically.
+    if (std::rename(tmpPath.c_str(), path.c_str()) != 0) {
         std::remove(tmpPath.c_str());
-        outError = "Failed to finalize save (rename failed): " + finalPath;
+
+        outError = "Failed to finalize save (rename failed): " + path;
         return false;
     }
 
