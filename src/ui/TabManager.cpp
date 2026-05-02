@@ -999,25 +999,50 @@ void TabManager::renderHomeTab(ToolManager& toolManager) {
             ImVec2 cardMax = {cardMin.x + cardW, cardMin.y + cardH};
 
             bool cardHovered =
-                recentListCanReceiveMouse &&
+                !homeInteractionsBlocked &&
                 ImGui::IsMouseHoveringRect(cardMin, cardMax, true);
 
-            ImU32 bgColor = exists
-                ? IM_COL32(28, 28, 31, 255)
-                : IM_COL32(45, 28, 28, 255);
+            const bool darkTheme = Theme::current() == ThemeMode::Dark;
 
-            if (cardHovered && exists)
-                bgColor = IM_COL32(36, 38, 43, 255);
+            ImU32 bgColor = 0;
+            ImU32 borderColor = 0;
 
-            if (entry.pinned && exists) {
-                bgColor = cardHovered
-                    ? IM_COL32(39, 43, 48, 255)
-                    : IM_COL32(32, 34, 39, 255);
+            if (darkTheme) {
+                bgColor = exists
+                    ? IM_COL32(28, 28, 31, 255)
+                    : IM_COL32(45, 28, 28, 255);
+
+                if (cardHovered && exists)
+                    bgColor = IM_COL32(36, 38, 43, 255);
+
+                if (entry.pinned && exists) {
+                    bgColor = cardHovered
+                        ? IM_COL32(39, 43, 48, 255)
+                        : IM_COL32(32, 34, 39, 255);
+                }
+
+                borderColor = exists
+                    ? IM_COL32(70, 72, 82, 255)
+                    : IM_COL32(170, 80, 80, 255);
             }
+            else {
+                bgColor = exists
+                    ? IM_COL32(246, 244, 238, 255)
+                    : IM_COL32(255, 235, 235, 255);
 
-            ImU32 borderColor = exists
-                ? IM_COL32(70, 72, 82, 255)
-                : IM_COL32(170, 80, 80, 255);
+                if (cardHovered && exists)
+                    bgColor = IM_COL32(236, 233, 225, 255);
+
+                if (entry.pinned && exists) {
+                    bgColor = cardHovered
+                        ? IM_COL32(228, 238, 241, 255)
+                        : IM_COL32(236, 246, 249, 255);
+                }
+
+                borderColor = exists
+                    ? IM_COL32(185, 181, 170, 255)
+                    : IM_COL32(210, 115, 115, 255);
+            }
 
             if (entry.pinned && exists)
                 borderColor = IM_COL32(44, 184, 213, 210);
