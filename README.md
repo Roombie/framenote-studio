@@ -434,7 +434,7 @@ Playback uses `Enter`.
 - [x] Drag-and-drop file opening
 - [x] Selection-aware drawing and shape previews
 - [x] CanvasPanel refactor by responsibility
-- [ ] Improved save/load validation
+- [x] Improved save/load validation
 - [ ] Better export options
 
 ### Future versions
