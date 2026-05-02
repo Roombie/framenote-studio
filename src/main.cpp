@@ -3,6 +3,12 @@
 #include <backends/imgui_impl_sdl3.h>
 #include <backends/imgui_impl_sdlrenderer3.h>
 
+#if defined(_WIN32)
+#include <windows.h>
+#else
+#include <unistd.h>
+#endif
+
 #include <memory>
 #include <string>
 
@@ -17,6 +23,17 @@ static constexpr int WINDOW_H = 800;
 
 int main(int argc, char* argv[]) {
     (void)argc; (void)argv;
+
+    // Set the working directory to the exe's own directory so that
+    // relative asset paths (icons, etc.) resolve correctly regardless
+    // of how or from where the application is launched.
+    if (const char* basePath = SDL_GetBasePath()) {
+#if defined(_WIN32)
+        SetCurrentDirectoryA(basePath);
+#else
+        chdir(basePath);
+#endif
+    }
 
     if (!SDL_Init(SDL_INIT_VIDEO)) {
         SDL_Log("SDL_Init failed: %s", SDL_GetError());
