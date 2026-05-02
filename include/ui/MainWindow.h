@@ -78,16 +78,16 @@ private:
 
     int         m_newCanvasW           = 128;
     int         m_newCanvasH           = 128;
-
+    
     // Export settings
-    int         m_exportFps            = 8;
-    bool        m_exportLoop           = true;
-    int         m_exportScale          = 1;
-    bool        m_exportUseFrameRange  = false;
-    int         m_exportStartFrame     = 1; // one-based UI value
-    int         m_exportEndFrame       = 1; // one-based UI value
-    int         m_exportPngFrame       = 1; // one-based UI value
-    int         m_exportBackground     = 0; // 0 transparent, 1 white, 2 black
+    int  m_exportFps           = 8;
+    bool m_exportLoop          = true;
+    int  m_exportScale         = 1;
+    bool m_exportUseFrameRange = false;
+    int  m_exportStartFrame    = 1; // one-based UI value
+    int  m_exportEndFrame      = 1; // one-based UI value
+    int  m_exportPngFrame      = 1; // one-based UI value
+    int  m_exportBackground    = 0; // 0 transparent, 1 white, 2 black
 
     // Drag/drop import state
     bool                         m_collectingDropBatch    = false;

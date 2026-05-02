@@ -39,6 +39,7 @@ set(SOURCES
 
     # UI
     src/ui/MainWindow.cpp
+    src/ui/MainWindowExport.cpp
     src/ui/TimelinePanel.cpp
     src/ui/ToolsPanel.cpp
     src/ui/Theme.cpp
@@ -57,6 +58,10 @@ set(SOURCES
     src/io/FileDialog.cpp
     src/io/RecentFiles.cpp
     src/io/RecoveryManager.cpp
+    src/io/ExportRasterUtils.cpp
+    src/io/PngExporter.cpp
+    src/io/GifExporter.cpp
+
 
     # Dear ImGui (vendored)
     third_party/imgui/imgui.cpp

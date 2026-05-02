@@ -1,9 +1,9 @@
 #pragma once
 
-#include <string>
-
 #include "core/Document.h"
 #include "io/ExportOptions.h"
+
+#include <string>
 
 namespace Framenote {
 
