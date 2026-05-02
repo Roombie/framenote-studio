@@ -285,6 +285,65 @@ void CanvasPanel::commitFloatIfNeeded() {
     }
 }
 
+void CanvasPanel::commitSelectionFloatIfNeeded() {
+    if (!m_tab ||
+        !m_tab->hasFloating ||
+        m_tab->floatingSource != FloatingSource::Selection) {
+        return;
+    }
+
+    auto* selectionTool = static_cast<SelectionTool*>(
+        m_toolManager->getTool(ToolType::Select)
+    );
+
+    if (!selectionTool)
+        return;
+
+    ToolEvent ce;
+    ce.selection = m_selection;
+    ce.tab = m_tab;
+
+    selectionTool->commitFloat(
+        *m_document,
+        m_timeline->currentFrame(),
+        ce
+    );
+}
+
+ToolEvent CanvasPanel::makeToolEvent(
+    const ImVec2& mousePos,
+    float originX,
+    float originY,
+    int canvasW,
+    int canvasH,
+    bool clampCoords
+) {
+    ImGuiIO& io = ImGui::GetIO();
+
+    int px = static_cast<int>(std::floor((mousePos.x - originX) / m_zoom));
+    int py = static_cast<int>(std::floor((mousePos.y - originY) / m_zoom));
+
+    if (clampCoords) {
+        if (px < 0) px = 0;
+        if (py < 0) py = 0;
+        if (px >= canvasW) px = canvasW - 1;
+        if (py >= canvasH) py = canvasH - 1;
+    }
+
+    ToolEvent e;
+    e.canvasX = static_cast<float>(px);
+    e.canvasY = static_cast<float>(py);
+    e.leftDown = io.MouseDown[0];
+    e.rightDown = io.MouseDown[1];
+    e.brushSize = m_toolManager->brushSize();
+    e.filled = m_toolManager->rectFilled();
+    e.addToSelection = io.KeyShift;
+    e.selection = m_selection;
+    e.tab = m_tab;
+
+    return e;
+}
+
 void CanvasPanel::pushCurrentFrameSnapshot() {
     int fi = m_timeline->currentFrame();
     auto& f = m_document->frame(fi);
@@ -622,59 +681,17 @@ void CanvasPanel::handleToolInput(
         isSelectionTool ||
         isMoveTool;
 
-    auto commitSelectionFloatIfNeeded = [&]() {
-        if (!m_tab ||
-            !m_tab->hasFloating ||
-            m_tab->floatingSource != FloatingSource::Selection) {
-            return;
-        }
-
-        auto* selectionTool = static_cast<SelectionTool*>(
-            m_toolManager->getTool(ToolType::Select)
-        );
-
-        if (!selectionTool)
-            return;
-
-        ToolEvent ce;
-        ce.selection = m_selection;
-        ce.tab = m_tab;
-
-        selectionTool->commitFloat(
-            *m_document,
-            m_timeline->currentFrame(),
-            ce
-        );
-    };
-
-    auto makeToolEvent = [&](bool clampCoords) {
-        int px = static_cast<int>(std::floor((mousePos.x - originX) / m_zoom));
-        int py = static_cast<int>(std::floor((mousePos.y - originY) / m_zoom));
-
-        if (clampCoords) {
-            if (px < 0) px = 0;
-            if (py < 0) py = 0;
-            if (px >= canvasW) px = canvasW - 1;
-            if (py >= canvasH) py = canvasH - 1;
-        }
-
-        ToolEvent e;
-        e.canvasX = static_cast<float>(px);
-        e.canvasY = static_cast<float>(py);
-        e.leftDown = io.MouseDown[0];
-        e.rightDown = io.MouseDown[1];
-        e.brushSize = m_toolManager->brushSize();
-        e.filled = m_toolManager->rectFilled();
-        e.addToSelection = io.KeyShift;
-        e.selection = m_selection;
-        e.tab = m_tab;
-
-        return e;
-    };
-
     auto makeToolEventForActiveTool = [&]() {
         bool clampCoords = !isMoveTool;
-        return makeToolEvent(clampCoords);
+
+        return makeToolEvent(
+            mousePos,
+            originX,
+            originY,
+            canvasW,
+            canvasH,
+            clampCoords
+        );
     };
 
     bool canDraw =
@@ -802,15 +819,7 @@ void CanvasPanel::handleToolInput(
 
         ToolEvent e = makeToolEventForActiveTool();
 
-        auto& f = m_document->frame(fi);
-
-        Snapshot snap;
-        snap.frameIndex = fi;
-        snap.bufferWidth = f.bufferWidth();
-        snap.bufferHeight = f.bufferHeight();
-        snap.pixels = f.pixels();
-
-        m_history.push(std::move(snap));
+        pushCurrentFrameSnapshot();
 
         m_strokeActive = true;
         m_strokeFrameIndex = fi;
@@ -1645,7 +1654,4 @@ void CanvasPanel::drawPreviewEllipsePixels(
         }
     );
 }
-
-void CanvasPanel::handleInput(float, float, float, float) {}
-
 } // namespace Framenote

@@ -32,8 +32,6 @@ public:
     void render();
 
 private:
-    void handleInput(float originX, float originY, float canvasW, float canvasH);
-
     // ── Canvas base rendering ─────────────────────────────────────────────────
     void drawCanvasBase(
         ImDrawList* dl,
@@ -51,9 +49,19 @@ private:
 
     // ── Editor actions ─────────────────────────────────────────────────────
     void commitFloatIfNeeded();
+    void commitSelectionFloatIfNeeded();
     void pushCurrentFrameSnapshot();
     void clearFloatingState();
     void deleteSelectionOrFrame();
+
+    ToolEvent makeToolEvent(
+        const ImVec2& mousePos,
+        float originX,
+        float originY,
+        int canvasW,
+        int canvasH,
+        bool clampCoords
+    );
 
     // ── Input handling ─────────────────────────────────────────────────────
     void handleKeyboardShortcuts(bool ctrlHeld, bool popupOpen);
