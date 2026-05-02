@@ -618,6 +618,25 @@ void CanvasPanel::render() {
     }
 
     // Input state.
+    ImVec2 canvasMin = {originX, originY};
+    ImVec2 canvasMax = {originX + canvasW, originY + canvasH};
+
+    // Create an actual ImGui input item exactly on top of the canvas image.
+    // This prevents tools from starting when the user is dragging a dock splitter,
+    // resizing panels, clicking the timeline, or interacting with another UI item.
+    ImGui::SetCursorScreenPos(canvasMin);
+
+    ImGui::InvisibleButton(
+        "##canvas_input_area",
+        ImVec2(canvasW, canvasH),
+        ImGuiButtonFlags_MouseButtonLeft |
+        ImGuiButtonFlags_MouseButtonRight |
+        ImGuiButtonFlags_MouseButtonMiddle
+    );
+
+    bool canvasInputHovered = ImGui::IsItemHovered();
+    bool canvasInputActive  = ImGui::IsItemActive();
+
     ImVec2 winPos = ImGui::GetWindowPos();
     ImVec2 winSize = {
         ImGui::GetWindowWidth(),
@@ -627,7 +646,7 @@ void CanvasPanel::render() {
     ImVec2 mp = io.MousePos;
 
     bool canvasWindowHovered =
-        ImGui::IsWindowHovered(ImGuiHoveredFlags_AllowWhenBlockedByActiveItem);
+        ImGui::IsWindowHovered(ImGuiHoveredFlags_None);
 
     bool rawInWindow =
         mp.x >= winPos.x &&
@@ -636,18 +655,18 @@ void CanvasPanel::render() {
         mp.y < winPos.y + winSize.y;
 
     bool rawInCanvas =
-        mp.x >= originX &&
-        mp.x < originX + canvasW &&
-        mp.y >= originY &&
-        mp.y < originY + canvasH;
+        mp.x >= canvasMin.x &&
+        mp.x <  canvasMax.x &&
+        mp.y >= canvasMin.y &&
+        mp.y <  canvasMax.y;
 
     bool inWindow =
         rawInWindow &&
-        (canvasWindowHovered || m_strokeActive);
+        (canvasWindowHovered || canvasInputActive || m_strokeActive);
 
     bool inCanvas =
         rawInCanvas &&
-        (canvasWindowHovered || m_strokeActive);
+        (canvasInputHovered || canvasInputActive || m_strokeActive);
 
     bool spaceHeld = ImGui::IsKeyDown(ImGuiKey_Space);
     bool ctrlHeld = io.KeyCtrl;
@@ -670,6 +689,11 @@ void CanvasPanel::render() {
 
             int px = static_cast<int>((mp.x - originX) / m_zoom);
             int py = static_cast<int>((mp.y - originY) / m_zoom);
+
+            if (px < 0) px = 0;
+            if (py < 0) py = 0;
+            if (px >= cw) px = cw - 1;
+            if (py >= ch) py = ch - 1;
 
             float rx0 = originX + (px - half) * m_zoom;
             float ry0 = originY + (py - half) * m_zoom;
@@ -733,11 +757,15 @@ void CanvasPanel::render() {
             ImGui::SetMouseCursor(ImGuiMouseCursor_ResizeAll);
         } else if (activelyDrawing) {
             ImGui::SetMouseCursor(ImGuiMouseCursor_None);
-        } else if (canvasWindowHovered) {
+        } else if (canvasWindowHovered || canvasInputHovered) {
             ImGui::SetMouseCursor(ImGuiMouseCursor_Arrow);
         }
     }
 
+    // Important:
+    // Do not use io.WantCaptureMouse here to block canvas input globally.
+    // The canvas input area itself is an ImGui item, so WantCaptureMouse can be true
+    // even when the canvas is the thing that should receive input.
     bool imguiCapturing = false;
 
     // ── Keyboard shortcuts ────────────────────────────────────────────────────
@@ -825,33 +853,7 @@ void CanvasPanel::render() {
 
         // Escape — commit float then deselect.
         if (ImGui::IsKeyPressed(ImGuiKey_Escape, false)) {
-            ToolEvent ce;
-            ce.selection = m_selection;
-            ce.tab = m_tab;
-
-            if (m_toolManager->activeToolType() == ToolType::Select) {
-                auto* t = static_cast<SelectionTool*>(
-                    m_toolManager->getTool(ToolType::Select)
-                );
-
-                if (t)
-                    t->commitFloat(
-                        *m_document,
-                        m_timeline->currentFrame(),
-                        ce
-                    );
-            } else {
-                auto* t = static_cast<MoveTool*>(
-                    m_toolManager->getTool(ToolType::Move)
-                );
-
-                if (t)
-                    t->commitFloat(
-                        *m_document,
-                        m_timeline->currentFrame(),
-                        ce
-                    );
-            }
+            commitFloatIfNeeded();
 
             if (m_selection)
                 m_selection->clear();
@@ -861,33 +863,7 @@ void CanvasPanel::render() {
         if (ImGui::IsKeyPressed(ImGuiKey_Enter, false) ||
             ImGui::IsKeyPressed(ImGuiKey_KeypadEnter, false)) {
             if (m_tab && m_tab->hasFloating) {
-                ToolEvent ce;
-                ce.selection = m_selection;
-                ce.tab = m_tab;
-
-                if (m_toolManager->activeToolType() == ToolType::Select) {
-                    auto* t = static_cast<SelectionTool*>(
-                        m_toolManager->getTool(ToolType::Select)
-                    );
-
-                    if (t)
-                        t->commitFloat(
-                            *m_document,
-                            m_timeline->currentFrame(),
-                            ce
-                        );
-                } else {
-                    auto* t = static_cast<MoveTool*>(
-                        m_toolManager->getTool(ToolType::Move)
-                    );
-
-                    if (t)
-                        t->commitFloat(
-                            *m_document,
-                            m_timeline->currentFrame(),
-                            ce
-                        );
-                }
+                commitFloatIfNeeded();
             } else {
                 m_timeline->isPlaying()
                     ? m_timeline->pause()
@@ -984,6 +960,10 @@ void CanvasPanel::render() {
         io.MouseDown[0] ||
         io.MouseDown[1];
 
+    bool drawingMousePressed =
+        io.MouseClicked[0] ||
+        io.MouseClicked[1];
+
     bool drawingMouseReleased =
         io.MouseReleased[0] ||
         io.MouseReleased[1];
@@ -996,7 +976,7 @@ void CanvasPanel::render() {
         (spaceHeld && io.MouseDown[0]);
 
     bool isDrawing =
-        inCanvas &&
+        m_strokeActive &&
         !spaceHeld &&
         !io.MouseDown[2] &&
         drawingMouseDown;
@@ -1055,6 +1035,17 @@ void CanvasPanel::render() {
             !popupOpen &&
             !imguiCapturing;
 
+        // New rule:
+        // A stroke may only START if the mouse click began on the actual canvas
+        // input area. Holding the mouse from outside and then entering the canvas
+        // must not start drawing.
+        bool canStartStroke =
+            tool &&
+            canDraw &&
+            drawingMousePressed &&
+            canvasInputHovered &&
+            rawInCanvas;
+
         bool shouldStopStroke =
             !drawingMouseDown ||
             !canDraw ||
@@ -1080,8 +1071,7 @@ void CanvasPanel::render() {
             int fi = m_timeline->currentFrame();
 
             if (!m_strokeActive) {
-                // Always start only from inside the real canvas.
-                if (rawInCanvas) {
+                if (canStartStroke) {
                     ToolEvent e = makeToolEvent();
 
                     auto& f = m_document->frame(fi);
