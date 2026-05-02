@@ -732,8 +732,8 @@ void TabManager::renderHomeTab(ToolManager& toolManager) {
         ImGuiWindowFlags_NoBringToFrontOnFocus |
         ImGuiWindowFlags_NoScrollbar);
 
-    // New Document modal lives here so IsPopupOpen works correctly
-    // from within this window's context.
+    // Open the New Document modal from within ##Home so it is part of
+    // this window's popup stack.
     if (m_showNewDialog) {
         ImGui::OpenPopup("New Document##dlg");
         m_showNewDialog = false;
@@ -829,11 +829,7 @@ void TabManager::renderHomeTab(ToolManager& toolManager) {
     }
 
     auto isHomeModalActive = [&]() {
-        return m_showNewDialog ||
-               m_showRecoverDialog ||
-               ImGui::IsPopupOpen("New Document##dlg") ||
-               ImGui::IsPopupOpen("Recover Files##home") ||
-               ImGui::IsPopupOpen("Clear Recent Projects##home");
+        return ImGui::IsPopupOpen("", ImGuiPopupFlags_AnyPopupId | ImGuiPopupFlags_AnyPopupLevel);
     };
 
     float centerX = io.DisplaySize.x * 0.5f;
