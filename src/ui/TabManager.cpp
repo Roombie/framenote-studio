@@ -337,16 +337,17 @@ static void showFileInFolder(const std::string& path) {
 void TabManager::render(ToolManager& toolManager) {
     renderTabBar();
 
+    if (m_showNewDialog) {
+        ImGui::OpenPopup("New Document##dlg");
+        m_showNewDialog = false;
+        m_newDialogActive = true;
+    }
+
     if (m_activeIndex == -1) {
         renderHomeTab(toolManager);
     }
     else if (m_activeIndex < static_cast<int>(m_tabs.size())) {
         renderDocumentTab(*m_tabs[m_activeIndex], toolManager);
-    }
-
-    if (m_showNewDialog) {
-        ImGui::OpenPopup("New Document##dlg");
-        m_showNewDialog = false;
     }
 
     ModalUtils::centerNextWindowOnAppearing();
@@ -436,6 +437,9 @@ void TabManager::render(ToolManager& toolManager) {
         }
 
         ImGui::EndPopup();
+    }
+    else {
+        m_newDialogActive = false;
     }
 }
 
@@ -825,11 +829,14 @@ void TabManager::renderHomeTab(ToolManager& toolManager) {
         ImGuiWindowFlags_NoSavedSettings |
         ImGuiWindowFlags_NoBringToFrontOnFocus |
         ImGuiWindowFlags_NoScrollbar);
-    
-    bool homeInteractionsBlocked =
-        ImGui::IsPopupOpen("New Document##dlg") ||
-        ImGui::IsPopupOpen("Recover Files##home") ||
-        ImGui::IsPopupOpen("Clear Recent Projects##home");
+
+    auto isHomeModalActive = [&]() {
+        return m_showNewDialog ||
+               m_newDialogActive ||
+               m_showRecoverDialog ||
+               ImGui::IsPopupOpen("Recover Files##home") ||
+               ImGui::IsPopupOpen("Clear Recent Projects##home");
+    };
 
     float centerX = io.DisplaySize.x * 0.5f;
     float startY  = io.DisplaySize.y * 0.25f - tabBarH;
@@ -842,6 +849,8 @@ void TabManager::renderHomeTab(ToolManager& toolManager) {
 
     ImGui::SetCursorPos({centerX - 120, startY + 90});
 
+    ImGui::BeginDisabled(isHomeModalActive());
+
     if (ImGui::Button("  New Document  ", {240, 40})) {
         m_showNewDialog = true;
         m_newDocW   = 128;
@@ -850,7 +859,11 @@ void TabManager::renderHomeTab(ToolManager& toolManager) {
         strncpy(m_newDocName, "untitled", sizeof(m_newDocName));
     }
 
+    ImGui::EndDisabled();
+
     ImGui::SetCursorPos({centerX - 120, startY + 140});
+
+    ImGui::BeginDisabled(isHomeModalActive());
 
     if (ImGui::Button("  Open File...  ", {240, 40})) {
         std::string path = FileDialog::openFile(
@@ -879,6 +892,8 @@ void TabManager::renderHomeTab(ToolManager& toolManager) {
         }
     }
 
+    ImGui::EndDisabled();
+
     float recentX = centerX - 300.0f;
     float recentY = startY + 210.0f;
     float recentW = 600.0f;
@@ -904,11 +919,18 @@ void TabManager::renderHomeTab(ToolManager& toolManager) {
         std::string recoverButtonLabel =
             "Recover (" + std::to_string(recoveryCount) + ")";
 
+        ImGui::BeginDisabled(isHomeModalActive());
+
         if (ImGui::SmallButton(recoverButtonLabel.c_str())) {
             m_showRecoverDialog = true;
         }
 
-        if (ImGui::IsItemHovered()) {
+        bool recoverHovered =
+            ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled);
+
+        ImGui::EndDisabled();
+
+        if (!isHomeModalActive() && recoverHovered) {
             ImGui::SetTooltip("Open autosaved recovery files");
         }
 
@@ -917,21 +939,29 @@ void TabManager::renderHomeTab(ToolManager& toolManager) {
 
     bool showThumbs = m_recentFiles.showThumbnails();
 
+    ImGui::BeginDisabled(isHomeModalActive());
+
     if (ImGui::Checkbox("Thumbnails", &showThumbs)) {
         m_recentFiles.setShowThumbnails(showThumbs);
     }
+
+    ImGui::EndDisabled();
 
     ImGui::SameLine();
 
     bool showPaths = m_recentFiles.showPaths();
 
+    ImGui::BeginDisabled(isHomeModalActive());
+
     if (ImGui::Checkbox("Paths", &showPaths)) {
         m_recentFiles.setShowPaths(showPaths);
     }
 
+    ImGui::EndDisabled();
+
     ImGui::SameLine();
 
-    ImGui::BeginDisabled(m_recentFiles.entries().empty());
+    ImGui::BeginDisabled(m_recentFiles.entries().empty() || isHomeModalActive());
 
     if (ImGui::SmallButton("Clear")) {
         ImGui::OpenPopup("Clear Recent Projects##home");
@@ -939,10 +969,15 @@ void TabManager::renderHomeTab(ToolManager& toolManager) {
 
     ImGui::EndDisabled();
 
+    ModalUtils::centerNextWindowOnAppearing();
+
     if (ImGui::BeginPopupModal(
             "Clear Recent Projects##home",
             nullptr,
             ImGuiWindowFlags_AlwaysAutoResize)) {
+
+        ModalUtils::keepCurrentWindowInsideMainViewport();
+
         ImGui::Text("Clear all recent projects?");
         ImGui::Separator();
 
@@ -960,6 +995,9 @@ void TabManager::renderHomeTab(ToolManager& toolManager) {
         ImGui::EndPopup();
     }
 
+    // Recompute after the New/Recover/Clear controls had a chance to set/open popups.
+    bool homeInteractionsBlocked = isHomeModalActive();
+
     ImGui::BeginChild(
         "##recent-projects-list",
         {recentW, recentH},
@@ -968,6 +1006,7 @@ void TabManager::renderHomeTab(ToolManager& toolManager) {
     );
 
     const bool recentListCanReceiveMouse =
+        !homeInteractionsBlocked &&
         ImGui::IsWindowHovered(ImGuiHoveredFlags_None);
 
     const auto& recent = m_recentFiles.entries();
@@ -1005,6 +1044,7 @@ void TabManager::renderHomeTab(ToolManager& toolManager) {
 
             bool cardHovered =
                 !homeInteractionsBlocked &&
+                exists &&
                 ImGui::IsMouseHoveringRect(cardMin, cardMax, true);
 
             const bool darkTheme = Theme::current() == ThemeMode::Dark;
@@ -1049,7 +1089,7 @@ void TabManager::renderHomeTab(ToolManager& toolManager) {
                     : IM_COL32(210, 115, 115, 255);
             }
 
-            if (entry.pinned && exists)
+            if (entry.pinned && exists && !homeInteractionsBlocked)
                 borderColor = IM_COL32(44, 184, 213, 210);
 
             dl->AddRectFilled(cardMin, cardMax, bgColor, 6.0f);
@@ -1103,9 +1143,10 @@ void TabManager::renderHomeTab(ToolManager& toolManager) {
 
             ImGui::TextUnformatted(visibleTitle.c_str());
 
-            titleHovered = ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled);
+            titleHovered =
+                ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled);
 
-            if (titleHovered) {
+            if (!homeInteractionsBlocked && titleHovered) {
                 if (!m_recentFiles.showPaths()) {
                     ImGui::SetTooltip("%s", entry.path.c_str());
                 }
@@ -1141,7 +1182,9 @@ void TabManager::renderHomeTab(ToolManager& toolManager) {
 
                 pathHovered = ImGui::IsItemHovered();
 
-                if (pathHovered && visiblePath != entry.path) {
+                if (!homeInteractionsBlocked &&
+                    pathHovered &&
+                    visiblePath != entry.path) {
                     ImGui::SetTooltip("%s", entry.path.c_str());
                 }
             }
@@ -1166,43 +1209,63 @@ void TabManager::renderHomeTab(ToolManager& toolManager) {
             bool pinButtonHovered = false;
             bool removeButtonHovered = false;
 
-            ImGui::BeginDisabled(!exists);
+            // Open
+            ImGui::BeginDisabled(homeInteractionsBlocked || !exists);
 
             if (ImGui::SmallButton("Open")) {
                 openPath = entry.path;
             }
 
-            openButtonHovered = ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled);
+            openButtonHovered =
+                ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled);
 
             ImGui::EndDisabled();
 
             ImGui::SameLine();
 
+            // Pin / Unpin
+            ImGui::BeginDisabled(homeInteractionsBlocked);
+
             if (ImGui::SmallButton(entry.pinned ? "Unpin" : "Pin")) {
                 pinPath = entry.path;
             }
 
-            pinButtonHovered = ImGui::IsItemHovered();
+            pinButtonHovered =
+                ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled);
+
+            ImGui::EndDisabled();
 
             ImGui::SameLine();
+
+            // Remove
+            ImGui::BeginDisabled(homeInteractionsBlocked);
 
             if (ImGui::SmallButton("Remove")) {
                 removePath = entry.path;
             }
 
-            removeButtonHovered = ImGui::IsItemHovered();
+            removeButtonHovered =
+                ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled);
+
+            ImGui::EndDisabled();
 
             ImGui::SameLine();
+
+            // Show in folder
+            ImGui::BeginDisabled(homeInteractionsBlocked);
 
             if (ImGui::SmallButton("Show")) {
                 showInFolderPath = entry.path;
             }
 
-            bool folderButtonHovered = ImGui::IsItemHovered();
+            bool folderButtonHovered =
+                ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled);
 
-            if (folderButtonHovered) {
+            if (!homeInteractionsBlocked && folderButtonHovered) {
                 ImGui::SetTooltip("Show in folder");
             }
+
+            ImGui::EndDisabled();
 
             ImGui::EndGroup();
 
@@ -1238,33 +1301,36 @@ void TabManager::renderHomeTab(ToolManager& toolManager) {
             ImGui::PopID();
         }
 
-        if (!openPath.empty()) {
-            std::string err;
-            auto doc = FileManager::load(openPath, err);
+        if (!homeInteractionsBlocked) {
+            if (!openPath.empty()) {
+                std::string err;
+                auto doc = FileManager::load(openPath, err);
 
-            if (doc) {
-                std::string name = openPath.substr(openPath.find_last_of("/\\") + 1);
+                if (doc) {
+                    std::string name =
+                        openPath.substr(openPath.find_last_of("/\\") + 1);
 
-                openDocument(std::move(doc), name, openPath);
+                    openDocument(std::move(doc), name, openPath);
 
-                if (auto* opened = activeTab()) {
-                    recordRecentFile(openPath, *opened->document);
+                    if (auto* opened = activeTab()) {
+                        recordRecentFile(openPath, *opened->document);
+                    }
+
+                    m_homeStatusMsg.clear();
                 }
-
-                m_homeStatusMsg.clear();
+                else {
+                    m_homeStatusMsg = "Open failed: " + err;
+                }
             }
-            else {
-                m_homeStatusMsg = "Open failed: " + err;
+            else if (!pinPath.empty()) {
+                m_recentFiles.togglePinned(pinPath);
             }
-        }
-        else if (!pinPath.empty()) {
-            m_recentFiles.togglePinned(pinPath);
-        }
-        else if (!removePath.empty()) {
-            m_recentFiles.removePath(removePath);
-        }
-        else if (!showInFolderPath.empty()) {
-            showFileInFolder(showInFolderPath);
+            else if (!removePath.empty()) {
+                m_recentFiles.removePath(removePath);
+            }
+            else if (!showInFolderPath.empty()) {
+                showFileInFolder(showInFolderPath);
+            }
         }
     }
 
@@ -1288,10 +1354,12 @@ void TabManager::renderHomeTab(ToolManager& toolManager) {
 
     ImGui::SetCursorPos({centerX - 120, socialY + 24});
 
+    ImGui::BeginDisabled(isHomeModalActive());
+
     if (ImGui::SmallButton("YouTube"))
         SDL_OpenURL("https://www.youtube.com/@Roombie");
 
-    if (ImGui::IsItemHovered())
+    if (!isHomeModalActive() && ImGui::IsItemHovered())
         ImGui::SetTooltip("youtube.com/@Roombie");
 
     ImGui::SameLine();
@@ -1299,7 +1367,7 @@ void TabManager::renderHomeTab(ToolManager& toolManager) {
     if (ImGui::SmallButton("Twitter / X"))
         SDL_OpenURL("https://x.com/Roombie_");
 
-    if (ImGui::IsItemHovered())
+    if (!isHomeModalActive() && ImGui::IsItemHovered())
         ImGui::SetTooltip("x.com/Roombie_");
 
     ImGui::SameLine();
@@ -1307,18 +1375,24 @@ void TabManager::renderHomeTab(ToolManager& toolManager) {
     if (ImGui::SmallButton("Itch.io"))
         SDL_OpenURL("https://roombiedev.itch.io/");
 
-    if (ImGui::IsItemHovered())
+    if (!isHomeModalActive() && ImGui::IsItemHovered())
         ImGui::SetTooltip("roombiedev.itch.io");
+
+    ImGui::EndDisabled();
 
     if (m_showRecoverDialog) {
         ImGui::OpenPopup("Recover Files##home");
         m_showRecoverDialog = false;
     }
 
+    ModalUtils::centerNextWindowOnAppearing();
+
     if (ImGui::BeginPopupModal(
             "Recover Files##home",
             nullptr,
             ImGuiWindowFlags_AlwaysAutoResize)) {
+
+        ModalUtils::keepCurrentWindowInsideMainViewport();
 
         ImGui::Text("Recovered autosave files");
         ImGui::TextDisabled("Open a recovery, then save it normally to keep it.");
