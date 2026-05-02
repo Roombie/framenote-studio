@@ -9,6 +9,7 @@
 #include "tools/EllipseTool.h"
 #include "tools/SelectionTool.h"
 #include "tools/ShapeRasterizer.h"
+#include "tools/SelectionPixelClip.h"
 
 #include <imgui.h>
 #include <SDL3/SDL.h>
@@ -548,6 +549,9 @@ void CanvasPanel::drawPreviewBrushPixel(
             if (px < 0 || py < 0 || px >= canvasW || py >= canvasH)
                 continue;
 
+            if (!SelectionPixelClip::canModifyPixel(m_selection, px, py))
+                continue;
+
             float sx0 = originX + px * m_zoom;
             float sy0 = originY + py * m_zoom;
 
@@ -641,6 +645,9 @@ void CanvasPanel::drawPreviewRectPixels(
             if (x < 0 || y < 0 || x >= canvasW || y >= canvasH)
                 continue;
 
+            if (!SelectionPixelClip::canModifyPixel(m_selection, x, y))
+                continue;
+
             float sx0 = originX + x * m_zoom;
             float sy0 = originY + y * m_zoom;
 
@@ -674,6 +681,9 @@ void CanvasPanel::drawPreviewEllipsePixels(
         filled,
         [&](int x, int y) {
             if (x < 0 || y < 0 || x >= canvasW || y >= canvasH)
+                return;
+
+            if (!SelectionPixelClip::canModifyPixel(m_selection, x, y))
                 return;
 
             float sx0 = originX + x * m_zoom;

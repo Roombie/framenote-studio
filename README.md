@@ -2,7 +2,7 @@
 
 **Flipnote’s soul. Aseprite’s precision.**
 
-Framenote Studio is a lightweight pixel animation editor inspired by Flipnote Studio and Aseprite. It focuses on quick frame-by-frame drawing, simple animation playback, onion skinning, palette-based pixel art, and export tools for small animations.
+Framenote Studio is a lightweight pixel animation editor inspired by Flipnote Studio and Aseprite. It focuses on quick frame-by-frame drawing, simple animation playback, onion skinning, palette-based pixel art, selection-aware editing, and export tools for small animations.
 
 Current version: **v0.2.0**
 
@@ -16,10 +16,32 @@ Current version: **v0.2.0**
 - Eraser tool
 - Fill tool
 - Eyedropper tool
+- Line tool
+- Rectangle tool
+- Ellipse tool
+- Selection tool
+- Move tool
 - Adjustable brush size
+- Filled and outline shape drawing
 - Palette-based color selection
+- Primary and secondary color support
 - Transparent canvas support
 - Pixel-perfect drawing workflow
+- Selection-aware drawing, erasing, fill, line, rectangle, and ellipse behavior
+- Shape previews that match the final committed result
+- Delete / Backspace support for selected pixels or full-frame clearing
+
+### Selection and movement
+
+- Rectangular selection tool
+- Marching ants selection outline
+- Floating selected-pixel movement
+- Full-canvas move tool behavior
+- Selection-aware pixel editing
+- Delete selected pixels while keeping the selection outline
+- Commit floating selection/canvas movement with Enter
+- Deselect/cancel selection with Escape
+- Photoshop/Aseprite-like separation between selected-pixel movement and full-canvas movement
 
 ### Animation
 
@@ -29,14 +51,19 @@ Current version: **v0.2.0**
 - Playback preview
 - Adjustable FPS
 - Onion skinning
+- Per-document animation state
 
 ### Documents
 
 - Multiple document tabs
+- Reorderable tabs, including the Home tab
 - Custom canvas size when creating a document
 - Canvas resize support
 - Per-document FPS
 - Native `.framenote` save/load format
+- Recent projects/home screen support
+- Recovery files UI
+- Drag-and-drop opening for compatible files
 
 ### Export
 
@@ -55,15 +82,17 @@ Current version: **v0.2.0**
 - Canvas panning and zooming
 - Keyboard shortcuts
 - Per-tab undo/redo history
+- Modal dialog interaction blocking where needed
+- Theme-aware recent/recovery thumbnails
 
 ---
 
 ## Known issues / limitations
 
-- Recent files list is not yet implemented.
 - Native file dialogs are currently implemented for Windows.
 - macOS and Linux builds are planned, but cross-platform file dialog support still needs to be added.
 - Layer system is not yet implemented.
+- Advanced transform tools are not yet implemented.
 - The native `.framenote` format is still early and may change before v1.0.
 
 ---
@@ -181,16 +210,27 @@ Note: native file dialogs are currently Windows-only, so some open/save dialog b
 | Eraser tool | E |
 | Fill tool | F |
 | Eyedropper tool | I |
+| Line tool | L |
+| Rectangle tool | R |
+| Ellipse tool | O |
+| Selection tool | M |
+| Move tool | V |
 | New document | Ctrl + N |
 | Open document | Ctrl + O |
 | Save document | Ctrl + S |
 | Undo | Ctrl + Z |
 | Redo | Ctrl + Y |
 | Canvas size | C |
-| Toggle onion skin | O |
 | Previous frame | Left Arrow |
 | Next frame | Right Arrow |
+| First frame | Shift + Left Arrow |
+| Last frame | Shift + Right Arrow |
 | Play / Pause | Enter |
+| Commit floating selection/canvas movement | Enter |
+| Deselect / cancel selection | Escape |
+| Delete selected pixels / clear current frame | Delete / Backspace |
+| Increase brush size | ] |
+| Decrease brush size | [ |
 | Zoom in / out | Mouse wheel or +/- |
 | Reset zoom | Ctrl + 0 |
 | Pan | Middle mouse drag or Space + left drag |
@@ -239,7 +279,7 @@ Framenote Studio is split into independent systems:
 
 ### `core/`
 
-Contains the document model, frames, canvas data, timeline state, palette data, and undo/redo history.
+Contains the document model, frames, canvas data, timeline state, palette data, tab state, and undo/redo history.
 
 Important classes include:
 
@@ -249,10 +289,11 @@ Important classes include:
 - `History`
 - `Palette`
 - `DocumentTab`
+- `Selection`
 
 ### `tools/`
 
-Contains drawing tools that operate on frame data.
+Contains drawing and editing tools that operate on frame data.
 
 Current tools:
 
@@ -260,6 +301,18 @@ Current tools:
 - `EraserTool`
 - `FillTool`
 - `EyedropperTool`
+- `LineTool`
+- `RectangleTool`
+- `EllipseTool`
+- `SelectionTool`
+- `MoveTool`
+
+Shared tool helpers include:
+
+- `ShapeRasterizer`
+- `SelectionPixelClip`
+
+`SelectionPixelClip` centralizes selection-aware pixel editing so tools such as Pencil, Eraser, Fill, Line, Rectangle, and Ellipse can all respect the active selection consistently.
 
 ### `renderer/`
 
@@ -267,11 +320,39 @@ Handles canvas rendering through SDL3 and ImGui integration.
 
 ### `ui/`
 
-Contains the application interface, including the main window, canvas panel, timeline panel, tools panel, palette panel, tab manager, theme handling, and icon loading.
+Contains the application interface, including the main window, canvas panel, timeline panel, tools panel, palette panel, tab manager, theme handling, icon loading, home screen, recent projects UI, and recovery UI.
 
 ### `io/`
 
-Handles saving, loading, native file dialogs, PNG export, and GIF export.
+Handles saving, loading, native file dialogs, PNG export, GIF export, and file/document operations.
+
+---
+
+## Canvas panel architecture
+
+The canvas UI is split by responsibility to keep the editor maintainable as it grows:
+
+- `CanvasPanel.cpp` handles the high-level canvas render/input pipeline.
+- `CanvasPanelActions.cpp` handles editor actions such as floating commits, delete behavior, snapshots, and tool event creation.
+- `CanvasPanelInput.cpp` handles keyboard shortcuts, zoom, pan, cursor behavior, and tool input routing.
+- `CanvasPanelRender.cpp` handles canvas rendering helpers, floating pixels, marching ants, rubber-band selection, and shape previews.
+
+This keeps `CanvasPanel::render()` focused on the main flow:
+
+```text
+upload frame
+draw canvas base
+draw floating pixels
+draw selection overlays
+draw shape previews
+draw selection rubber band
+prepare canvas input region
+handle cursor
+handle shortcuts
+handle zoom/pan
+handle tool input
+draw zoom label
+```
 
 ---
 
@@ -304,6 +385,31 @@ This prevents red/blue channel swapping during export and save/load round trips.
 
 Frames may keep a larger backing buffer after the visible canvas is resized smaller. Export and save logic should always respect the visible canvas size while using the backing buffer width as the row stride.
 
+### Selection-aware editing
+
+Pixel-modifying tools use shared selection clipping logic so drawing, erasing, filling, and shape tools only modify selected pixels when a selection is active.
+
+Affected tools include:
+
+- Pencil
+- Eraser
+- Fill
+- Line
+- Rectangle
+- Ellipse
+
+Selection, Move, and Eyedropper are handled differently because they do not use normal clipped pixel drawing:
+
+- Selection creates and manipulates selected regions.
+- Move moves floating selection/canvas data.
+- Eyedropper reads pixel color without modifying pixels.
+
+### Shape previews
+
+Line, rectangle, and ellipse previews are rendered using the same selection-aware clipping rules as the final committed result.
+
+This prevents previews from showing pixels outside the active selection when the committed drawing would be clipped.
+
 ### Playback shortcut
 
 Space is reserved for canvas panning with `Space + left drag`.
@@ -319,23 +425,30 @@ Playback uses `Enter`.
 - [x] Tool icons
 - [x] Brush size control
 - [x] Basic palette editing
-- [ ] Recent files list
-- [ ] More drawing tools
+- [x] More drawing tools
+- [x] Selection tool
+- [x] Move tool
+- [x] Line, rectangle, and ellipse tools
+- [x] Recent projects/home screen support
+- [x] Recovery files UI
+- [x] Drag-and-drop file opening
+- [x] Selection-aware drawing and shape previews
+- [x] CanvasPanel refactor by responsibility
 - [ ] Improved save/load validation
 - [ ] Better export options
 
 ### Future versions
 
 - [ ] Layer system
-- [ ] Selection tools
-- [ ] Move / transform tools
-- [ ] Line, rectangle, and circle tools
+- [ ] Advanced transform tools
 - [ ] Cross-platform native file dialogs
 - [ ] macOS and Linux packaging
 - [ ] Timeline improvements
 - [ ] Animation preview improvements
 - [ ] Custom workspace/layout settings
 - [ ] More robust `.framenote` format versioning
+- [ ] More advanced selection modes
+- [ ] More advanced palette workflows
 
 ---
 

@@ -1,45 +1,12 @@
 #include "tools/EllipseTool.h"
 
-#include "core/Selection.h"
 #include "tools/ShapeRasterizer.h"
+#include "tools/SelectionPixelClip.h"
 
 #include <algorithm>
 #include <cstdint>
 
 namespace Framenote {
-namespace {
-
-const Selection* g_selectionClip = nullptr;
-
-class SelectionClipScope {
-public:
-    explicit SelectionClipScope(const Selection* selection)
-        : m_previous(g_selectionClip) {
-        g_selectionClip = selection;
-    }
-
-    ~SelectionClipScope() {
-        g_selectionClip = m_previous;
-    }
-
-private:
-    const Selection* m_previous = nullptr;
-};
-
-bool canModifyPixel(int x, int y) {
-    if (!g_selectionClip || g_selectionClip->isEmpty())
-        return true;
-
-    if (x < 0 || y < 0 ||
-        x >= g_selectionClip->width() ||
-        y >= g_selectionClip->height()) {
-        return false;
-    }
-
-    return g_selectionClip->isSelected(x, y);
-}
-
-} // namespace
 
 void EllipseTool::onPress(Document& doc, int frameIndex, const ToolEvent& e) {
     m_drawing = true;
@@ -76,20 +43,17 @@ void EllipseTool::onRelease(Document& doc, int frameIndex, const ToolEvent& e) {
 
     m_drawing = false;
 
-    {
-        SelectionClipScope clip(e.selection);
-
-        drawEllipse(
-            doc,
-            frameIndex,
-            m_startX,
-            m_startY,
-            m_endX,
-            m_endY,
-            e.filled,
-            m_color
-        );
-    }
+    drawEllipse(
+        doc,
+        frameIndex,
+        m_startX,
+        m_startY,
+        m_endX,
+        m_endY,
+        e.filled,
+        m_color,
+        e.selection
+    );
 
     doc.markDirty();
 }
@@ -102,7 +66,8 @@ void EllipseTool::drawEllipse(
     int x1,
     int y1,
     bool filled,
-    uint32_t color
+    uint32_t color,
+    const Selection* selection
 ) {
     auto& frame = doc.frame(frameIndex);
 
@@ -119,7 +84,7 @@ void EllipseTool::drawEllipse(
             if (px < 0 || py < 0 || px >= cw || py >= ch)
                 return;
 
-            if (!canModifyPixel(px, py))
+            if (!SelectionPixelClip::canModifyPixel(selection, px, py))
                 return;
 
             frame.setPixel(px, py, color);

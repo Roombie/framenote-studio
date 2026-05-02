@@ -33,7 +33,8 @@ private:
         int x1,
         int y1,
         bool filled,
-        uint32_t color
+        uint32_t color,
+        const Selection* selection
     );
 
 private:

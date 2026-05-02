@@ -1,7 +1,11 @@
 #pragma once
+
 #include "tools/ToolManager.h"
+#include <cstdint>
 
 namespace Framenote {
+
+class Selection;
 
 class LineTool : public Tool {
 public:
@@ -12,26 +16,41 @@ public:
     void onDrag   (Document& doc, int frameIndex, const ToolEvent& e) override;
     void onRelease(Document& doc, int frameIndex, const ToolEvent& e) override;
 
-    // Preview state — read by CanvasPanel to draw the overlay
-    bool  isDrawing() const { return m_drawing; }
-    int   startX()    const { return m_startX; }
-    int   startY()    const { return m_startY; }
-    int   endX()      const { return m_endX; }
-    int   endY()      const { return m_endY; }
+    bool isDrawing() const { return m_drawing; }
+    int  startX()    const { return m_startX; }
+    int  startY()    const { return m_startY; }
+    int  endX()      const { return m_endX; }
+    int  endY()      const { return m_endY; }
 
 private:
-    void drawLine(Document& doc, int frameIndex,
-                  int x0, int y0, int x1, int y1,
-                  int brushSize, uint32_t color);
-    void drawBrush(Document& doc, int frameIndex,
-                   int x, int y, int brushSize, uint32_t color);
+    void drawLine(
+        Document& doc,
+        int frameIndex,
+        int x0,
+        int y0,
+        int x1,
+        int y1,
+        int brushSize,
+        uint32_t color,
+        const Selection* selection
+    );
 
-    bool     m_drawing  = false;
-    int      m_startX   = 0;
-    int      m_startY   = 0;
-    int      m_endX     = 0;
-    int      m_endY     = 0;
-    uint32_t m_color    = 0xFF000000;
+    void drawBrush(
+        Document& doc,
+        int frameIndex,
+        int x,
+        int y,
+        int brushSize,
+        uint32_t color,
+        const Selection* selection
+    );
+
+    bool     m_drawing = false;
+    int      m_startX = 0;
+    int      m_startY = 0;
+    int      m_endX = 0;
+    int      m_endY = 0;
+    uint32_t m_color = 0xFF000000;
 };
 
 } // namespace Framenote
