@@ -337,109 +337,11 @@ static void showFileInFolder(const std::string& path) {
 void TabManager::render(ToolManager& toolManager) {
     renderTabBar();
 
-    if (m_showNewDialog) {
-        ImGui::OpenPopup("New Document##dlg");
-        m_showNewDialog = false;
-        m_newDialogActive = true;
-    }
-
     if (m_activeIndex == -1) {
         renderHomeTab(toolManager);
     }
     else if (m_activeIndex < static_cast<int>(m_tabs.size())) {
         renderDocumentTab(*m_tabs[m_activeIndex], toolManager);
-    }
-
-    ModalUtils::centerNextWindowOnAppearing();
-
-    if (ImGui::BeginPopupModal(
-            "New Document##dlg",
-            nullptr,
-            ImGuiWindowFlags_AlwaysAutoResize)) {
-        
-        ModalUtils::keepCurrentWindowInsideMainViewport();
-
-        ImGui::InputText("Name##new", m_newDocName, sizeof(m_newDocName));
-
-        ImGui::Separator();
-        ImGui::Text("Canvas size:");
-
-        ImGui::SetNextItemWidth(120);
-        ImGui::InputInt("W##new", &m_newDocW);
-
-        ImGui::SameLine();
-        ImGui::Text("x");
-
-        ImGui::SameLine();
-        ImGui::SetNextItemWidth(120);
-        ImGui::InputInt("H##new", &m_newDocH);
-
-        if (m_newDocW < 1) m_newDocW = 1;
-        if (m_newDocH < 1) m_newDocH = 1;
-        if (m_newDocW > 4096) m_newDocW = 4096;
-        if (m_newDocH > 4096) m_newDocH = 4096;
-
-        ImGui::Separator();
-        ImGui::Text("Presets:");
-
-        ImGui::SameLine();
-        if (ImGui::SmallButton("16"))  { m_newDocW = 16;  m_newDocH = 16;  }
-
-        ImGui::SameLine();
-        if (ImGui::SmallButton("32"))  { m_newDocW = 32;  m_newDocH = 32;  }
-
-        ImGui::SameLine();
-        if (ImGui::SmallButton("64"))  { m_newDocW = 64;  m_newDocH = 64;  }
-
-        ImGui::SameLine();
-        if (ImGui::SmallButton("128")) { m_newDocW = 128; m_newDocH = 128; }
-
-        ImGui::SameLine();
-        if (ImGui::SmallButton("256")) { m_newDocW = 256; m_newDocH = 256; }
-
-        ImGui::Separator();
-
-        if (ImGui::SmallButton("-##new_fps"))
-            m_newDocFps--;
-
-        ImGui::SameLine();
-        ImGui::SetNextItemWidth(55.0f);
-        ImGui::InputInt("##new_fps_value", &m_newDocFps, 0, 0);
-
-        ImGui::SameLine();
-
-        if (ImGui::SmallButton("+##new_fps"))
-            m_newDocFps++;
-
-        ImGui::SameLine();
-        ImGui::Text("FPS");
-
-        if (m_newDocFps < 1)  m_newDocFps = 1;
-        if (m_newDocFps > 60) m_newDocFps = 60;
-
-        ImGui::Separator();
-
-        if (ImGui::Button("Create", {100, 0})) {
-            newDocument(
-                m_newDocName[0] ? m_newDocName : "untitled",
-                m_newDocW,
-                m_newDocH,
-                m_newDocFps
-            );
-
-            ImGui::CloseCurrentPopup();
-        }
-
-        ImGui::SameLine();
-
-        if (ImGui::Button("Cancel", {100, 0})) {
-            ImGui::CloseCurrentPopup();
-        }
-
-        ImGui::EndPopup();
-    }
-    else {
-        m_newDialogActive = false;
     }
 }
 
@@ -830,10 +732,106 @@ void TabManager::renderHomeTab(ToolManager& toolManager) {
         ImGuiWindowFlags_NoBringToFrontOnFocus |
         ImGuiWindowFlags_NoScrollbar);
 
+    // New Document modal lives here so IsPopupOpen works correctly
+    // from within this window's context.
+    if (m_showNewDialog) {
+        ImGui::OpenPopup("New Document##dlg");
+        m_showNewDialog = false;
+    }
+
+    ModalUtils::centerNextWindowOnAppearing();
+
+    if (ImGui::BeginPopupModal(
+            "New Document##dlg",
+            nullptr,
+            ImGuiWindowFlags_AlwaysAutoResize)) {
+
+        ModalUtils::keepCurrentWindowInsideMainViewport();
+
+        ImGui::InputText("Name##new", m_newDocName, sizeof(m_newDocName));
+
+        ImGui::Separator();
+        ImGui::Text("Canvas size:");
+
+        ImGui::SetNextItemWidth(120);
+        ImGui::InputInt("W##new", &m_newDocW);
+
+        ImGui::SameLine();
+        ImGui::Text("x");
+
+        ImGui::SameLine();
+        ImGui::SetNextItemWidth(120);
+        ImGui::InputInt("H##new", &m_newDocH);
+
+        if (m_newDocW < 1) m_newDocW = 1;
+        if (m_newDocH < 1) m_newDocH = 1;
+        if (m_newDocW > 4096) m_newDocW = 4096;
+        if (m_newDocH > 4096) m_newDocH = 4096;
+
+        ImGui::Separator();
+        ImGui::Text("Presets:");
+
+        ImGui::SameLine();
+        if (ImGui::SmallButton("16"))  { m_newDocW = 16;  m_newDocH = 16;  }
+
+        ImGui::SameLine();
+        if (ImGui::SmallButton("32"))  { m_newDocW = 32;  m_newDocH = 32;  }
+
+        ImGui::SameLine();
+        if (ImGui::SmallButton("64"))  { m_newDocW = 64;  m_newDocH = 64;  }
+
+        ImGui::SameLine();
+        if (ImGui::SmallButton("128")) { m_newDocW = 128; m_newDocH = 128; }
+
+        ImGui::SameLine();
+        if (ImGui::SmallButton("256")) { m_newDocW = 256; m_newDocH = 256; }
+
+        ImGui::Separator();
+
+        if (ImGui::SmallButton("-##new_fps"))
+            m_newDocFps--;
+
+        ImGui::SameLine();
+        ImGui::SetNextItemWidth(55.0f);
+        ImGui::InputInt("##new_fps_value", &m_newDocFps, 0, 0);
+
+        ImGui::SameLine();
+
+        if (ImGui::SmallButton("+##new_fps"))
+            m_newDocFps++;
+
+        ImGui::SameLine();
+        ImGui::Text("FPS");
+
+        if (m_newDocFps < 1)  m_newDocFps = 1;
+        if (m_newDocFps > 60) m_newDocFps = 60;
+
+        ImGui::Separator();
+
+        if (ImGui::Button("Create", {100, 0})) {
+            newDocument(
+                m_newDocName[0] ? m_newDocName : "untitled",
+                m_newDocW,
+                m_newDocH,
+                m_newDocFps
+            );
+
+            ImGui::CloseCurrentPopup();
+        }
+
+        ImGui::SameLine();
+
+        if (ImGui::Button("Cancel", {100, 0})) {
+            ImGui::CloseCurrentPopup();
+        }
+
+        ImGui::EndPopup();
+    }
+
     auto isHomeModalActive = [&]() {
         return m_showNewDialog ||
-               m_newDialogActive ||
                m_showRecoverDialog ||
+               ImGui::IsPopupOpen("New Document##dlg") ||
                ImGui::IsPopupOpen("Recover Files##home") ||
                ImGui::IsPopupOpen("Clear Recent Projects##home");
     };

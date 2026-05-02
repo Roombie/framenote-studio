@@ -54,7 +54,6 @@ private:
     int                                       m_draggingTab       = -1;
 
     bool m_showNewDialog   = false;
-    bool m_newDialogActive = false;
     bool m_dockInitialized = false;  // true after first-run layout is built
     int  m_newDocW         = 128;
     int  m_newDocH         = 128;
