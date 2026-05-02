@@ -7,6 +7,7 @@
 #include "tools/EllipseTool.h"
 #include "tools/SelectionTool.h"
 #include "tools/MoveTool.h"
+#include "tools/ShapeRasterizer.h"
 
 #include <imgui.h>
 #include <cmath>
@@ -458,45 +459,16 @@ void CanvasPanel::render() {
         };
 
         auto drawPreviewEllipsePixels = [&](int x0, int y0, int x1, int y1,
-                                            bool filled, ImU32 color) {
-            int left   = std::min(x0, x1);
-            int right  = std::max(x0, x1);
-            int top    = std::min(y0, y1);
-            int bottom = std::max(y0, y1);
-
-            float cx = (left + right) * 0.5f;
-            float cy = (top + bottom) * 0.5f;
-
-            float rx = std::max(0.5f, (right - left + 1) * 0.5f);
-            float ry = std::max(0.5f, (bottom - top + 1) * 0.5f);
-
-            for (int y = top; y <= bottom; ++y) {
-                for (int x = left; x <= right; ++x) {
+                                    bool filled, ImU32 color) {
+            ShapeRasterizer::rasterizeEllipse(
+                x0,
+                y0,
+                x1,
+                y1,
+                filled,
+                [&](int x, int y) {
                     if (x < 0 || y < 0 || x >= cw || y >= ch)
-                        continue;
-
-                    float nx = (x - cx) / rx;
-                    float ny = (y - cy) / ry;
-                    float d = nx * nx + ny * ny;
-
-                    bool draw = false;
-
-                    if (filled) {
-                        draw = d <= 1.0f;
-                    } else {
-                        // Approximate outline thickness in normalized ellipse space.
-                        float innerRx = std::max(0.5f, rx - 1.0f);
-                        float innerRy = std::max(0.5f, ry - 1.0f);
-
-                        float inx = (x - cx) / innerRx;
-                        float iny = (y - cy) / innerRy;
-                        float innerD = inx * inx + iny * iny;
-
-                        draw = d <= 1.0f && innerD >= 1.0f;
-                    }
-
-                    if (!draw)
-                        continue;
+                        return;
 
                     float sx0 = originX + x * m_zoom;
                     float sy0 = originY + y * m_zoom;
@@ -507,7 +479,7 @@ void CanvasPanel::render() {
                         color
                     );
                 }
-            }
+            );
         };
 
         Color previewColor =
@@ -806,6 +778,94 @@ void CanvasPanel::render() {
             }
         };
 
+        auto pushCurrentFrameSnapshot = [&]() {
+            int fi = m_timeline->currentFrame();
+            auto& f = m_document->frame(fi);
+
+            Snapshot snap;
+            snap.frameIndex = fi;
+            snap.bufferWidth = f.bufferWidth();
+            snap.bufferHeight = f.bufferHeight();
+            snap.pixels = f.pixels();
+
+            m_history.push(std::move(snap));
+        };
+
+        auto clearFloatingState = [&]() {
+            if (!m_tab)
+                return;
+
+            m_tab->hasFloating = false;
+            m_tab->floatingSource = FloatingSource::None;
+            m_tab->floatPixels.clear();
+            m_tab->floatW = 0;
+            m_tab->floatH = 0;
+            m_tab->floatOffsetX = 0;
+            m_tab->floatOffsetY = 0;
+            m_tab->floatStartX = 0;
+            m_tab->floatStartY = 0;
+        };
+
+        auto deleteSelectionOrFrame = [&]() {
+            int fi = m_timeline->currentFrame();
+            auto& frame = m_document->frame(fi);
+
+            bool hasSelection =
+                m_selection &&
+                !m_selection->isEmpty();
+
+            bool hasFloating =
+                m_tab &&
+                m_tab->hasFloating;
+
+            bool frameHasPixels = false;
+
+            const auto& pixels = frame.pixels();
+
+            for (size_t i = 3; i < pixels.size(); i += 4) {
+                if (pixels[i] != 0) {
+                    frameHasPixels = true;
+                    break;
+                }
+            }
+
+            if (!hasSelection && !hasFloating && !frameHasPixels)
+                return;
+
+            pushCurrentFrameSnapshot();
+
+            if (hasFloating) {
+                clearFloatingState();
+                m_document->markDirty();
+                return;
+            }
+
+            if (hasSelection) {
+                int sw = m_selection->width();
+                int sh = m_selection->height();
+
+                for (int y = 0; y < sh; ++y) {
+                    for (int x = 0; x < sw; ++x) {
+                        if (!m_selection->isSelected(x, y))
+                            continue;
+
+                        if (x < 0 || y < 0 || x >= cw || y >= ch)
+                            continue;
+
+                        frame.setPixel(x, y, 0x00000000);
+                    }
+                }
+            } else {
+                for (int y = 0; y < ch; ++y) {
+                    for (int x = 0; x < cw; ++x) {
+                        frame.setPixel(x, y, 0x00000000);
+                    }
+                }
+            }
+
+            m_document->markDirty();
+        };
+
         if (ImGui::IsKeyPressed(ImGuiKey_B, false)) {
             commitFloatIfNeeded();
             m_toolManager->selectTool(ToolType::Pencil);
@@ -857,6 +917,11 @@ void CanvasPanel::render() {
 
             if (m_selection)
                 m_selection->clear();
+        }
+
+        if (ImGui::IsKeyPressed(ImGuiKey_Delete, false) ||
+            ImGui::IsKeyPressed(ImGuiKey_Backspace, false)) {
+            deleteSelectionOrFrame();
         }
 
         // Enter — commit float or toggle play.
@@ -995,25 +1060,67 @@ void CanvasPanel::render() {
             activeTool == ToolType::Pencil ||
             activeTool == ToolType::Eraser;
 
-        bool isDragOutsideTool =
+        bool isShapeTool =
             activeTool == ToolType::Line ||
             activeTool == ToolType::Rectangle ||
-            activeTool == ToolType::Ellipse ||
-            activeTool == ToolType::Select ||
+            activeTool == ToolType::Ellipse;
+
+        bool isSelectionTool =
+            activeTool == ToolType::Select;
+
+        bool isMoveTool =
             activeTool == ToolType::Move;
 
-        auto makeToolEvent = [&]() {
-            float relX = (mp.x - originX) / canvasW;
-            float relY = (mp.y - originY) / canvasH;
+        bool isDragOutsideTool =
+            isShapeTool ||
+            isSelectionTool ||
+            isMoveTool;
 
-            int px = static_cast<int>(relX * cw);
-            int py = static_cast<int>(relY * ch);
+        bool canStartFromOutsideThenEnter =
+            isFreehandTool ||
+            isShapeTool ||
+            isSelectionTool ||
+            isMoveTool;
 
-            // Clamp coordinates so drag-outside tools can keep previewing safely.
-            if (px < 0) px = 0;
-            if (py < 0) py = 0;
-            if (px >= cw) px = cw - 1;
-            if (py >= ch) py = ch - 1;
+        auto commitSelectionFloatIfNeeded = [&]() {
+            if (!m_tab ||
+                !m_tab->hasFloating ||
+                m_tab->floatingSource != FloatingSource::Selection) {
+                return;
+            }
+
+            auto* selectionTool = static_cast<SelectionTool*>(
+                m_toolManager->getTool(ToolType::Select)
+            );
+
+            if (!selectionTool)
+                return;
+
+            ToolEvent ce;
+            ce.selection = m_selection;
+            ce.tab = m_tab;
+
+            selectionTool->commitFloat(
+                *m_document,
+                m_timeline->currentFrame(),
+                ce
+            );
+        };
+
+        auto makeToolEvent = [&](bool clampCoords) {
+            // Use zoom-space coordinates directly.
+            // This is important for Move Tool:
+            // if we clamp coordinates outside the canvas, Move sees dx/dy as 0
+            // while dragging outside, so it feels broken.
+            int px = static_cast<int>(std::floor((mp.x - originX) / m_zoom));
+            int py = static_cast<int>(std::floor((mp.y - originY) / m_zoom));
+
+            if (clampCoords) {
+                if (px < 0) px = 0;
+                if (py < 0) py = 0;
+                if (px >= cw) px = cw - 1;
+                if (py >= ch) py = ch - 1;
+            }
 
             ToolEvent e;
             e.canvasX = static_cast<float>(px);
@@ -1029,32 +1136,120 @@ void CanvasPanel::render() {
             return e;
         };
 
+        auto makeToolEventForActiveTool = [&]() {
+            bool clampCoords = !isMoveTool;
+            return makeToolEvent(clampCoords);
+        };
+
         bool canDraw =
             !spaceHeld &&
             !io.MouseDown[2] &&
             !popupOpen &&
             !imguiCapturing;
 
-        // New rule:
-        // A stroke may only START if the mouse click began on the actual canvas
-        // input area. Holding the mouse from outside and then entering the canvas
-        // must not start drawing.
-        bool canStartStroke =
+        ImVec2 prevMp = {
+            mp.x - io.MouseDelta.x,
+            mp.y - io.MouseDelta.y
+        };
+
+        bool prevRawInCanvas =
+            prevMp.x >= canvasMin.x &&
+            prevMp.x <  canvasMax.x &&
+            prevMp.y >= canvasMin.y &&
+            prevMp.y <  canvasMax.y;
+
+        bool enteredCanvasThisFrame =
+            rawInCanvas &&
+            !prevRawInCanvas;
+
+        bool pressedOnCanvas =
+            drawingMousePressed &&
+            rawInCanvas &&
+            canvasInputHovered;
+
+        bool pressedInEmptyCanvasWindow =
+            drawingMousePressed &&
+            !rawInCanvas &&
+            canvasWindowHovered &&
+            !ImGui::IsAnyItemActive();
+
+        // Selection behavior:
+        // Pressing outside the actual canvas cancels the current selection.
+        // If the user keeps dragging and enters the canvas, we allow a new
+        // selection to start at the entry point.
+        if (tool &&
+            isSelectionTool &&
+            pressedInEmptyCanvasWindow) {
+            commitSelectionFloatIfNeeded();
+
+            if (m_selection)
+                m_selection->clear();
+
+            if (m_tab) {
+                m_tab->canvasToolDragArmed =
+                    canDraw &&
+                    canStartFromOutsideThenEnter;
+            }
+        }
+
+        // Normal canvas click starts immediately.
+        bool canStartFromCanvasClick =
             tool &&
             canDraw &&
-            drawingMousePressed &&
-            canvasInputHovered &&
-            rawInCanvas;
+            pressedOnCanvas;
+
+        // Move behavior:
+        // Move is allowed to start directly from empty Canvas window space,
+        // even outside the actual canvas image.
+        bool canStartMoveFromOutsideCanvas =
+            tool &&
+            isMoveTool &&
+            canDraw &&
+            pressedInEmptyCanvasWindow;
+
+        // Arm the tool if the mouse press starts outside the actual canvas,
+        // but still in the safe empty Canvas window area.
+        //
+        // Selection is allowed here too:
+        // it clears the previous selection on press, then starts a new one only
+        // if the drag enters the canvas.
+        if (drawingMousePressed) {
+            if (m_tab) {
+                bool canArm =
+                    tool &&
+                    canDraw &&
+                    canStartFromOutsideThenEnter &&
+                    pressedInEmptyCanvasWindow;
+
+                m_tab->canvasToolDragArmed = canArm;
+            }
+        }
+
+        if (!drawingMouseDown || !canDraw) {
+            if (m_tab)
+                m_tab->canvasToolDragArmed = false;
+        }
+
+        bool canStartFromArmedOutsideDrag =
+            tool &&
+            canDraw &&
+            drawingMouseDown &&
+            rawInCanvas &&
+            m_tab &&
+            m_tab->canvasToolDragArmed &&
+            !m_strokeActive;
+
+        bool canStartStroke =
+            canStartFromCanvasClick ||
+            canStartMoveFromOutsideCanvas ||
+            canStartFromArmedOutsideDrag;
 
         bool shouldStopStroke =
             !drawingMouseDown ||
-            !canDraw ||
-            (isFreehandTool && !rawInCanvas);
+            !canDraw;
 
-        // Stop freehand tools when leaving the canvas.
-        // Do not stop shape/move/selection tools when leaving the canvas.
         if (tool && m_strokeActive && shouldStopStroke) {
-            ToolEvent e = makeToolEvent();
+            ToolEvent e = makeToolEventForActiveTool();
 
             int releaseFrame =
                 m_strokeFrameIndex >= 0
@@ -1065,6 +1260,9 @@ void CanvasPanel::render() {
 
             m_strokeActive = false;
             m_strokeFrameIndex = -1;
+
+            if (m_tab)
+                m_tab->canvasToolDragArmed = false;
         }
 
         if (tool && canDraw && drawingMouseDown) {
@@ -1072,7 +1270,7 @@ void CanvasPanel::render() {
 
             if (!m_strokeActive) {
                 if (canStartStroke) {
-                    ToolEvent e = makeToolEvent();
+                    ToolEvent e = makeToolEventForActiveTool();
 
                     auto& f = m_document->frame(fi);
 
@@ -1087,14 +1285,49 @@ void CanvasPanel::render() {
                     m_strokeActive = true;
                     m_strokeFrameIndex = fi;
 
+                    if (m_tab)
+                        m_tab->canvasToolDragArmed = false;
+
                     tool->onPress(*m_document, fi, e);
                 }
             } else {
-                // Freehand tools only continue inside the canvas.
-                // Shape/move/selection tools continue even outside using clamped coords.
-                if (rawInCanvas || isDragOutsideTool) {
-                    ToolEvent e = makeToolEvent();
+                if (isFreehandTool) {
+                    // Pencil/Eraser:
+                    // Draw only while inside the canvas.
+                    // If we left and re-entered, restart the stroke point so it
+                    // does not connect a long line across the outside area.
+                    if (rawInCanvas) {
+                        ToolEvent e = makeToolEventForActiveTool();
+
+                        if (enteredCanvasThisFrame) {
+                            tool->onPress(*m_document, fi, e);
+                        } else {
+                            tool->onDrag(*m_document, fi, e);
+                        }
+                    }
+                }
+                else if (isShapeTool || isSelectionTool) {
+                    // Line/Rectangle/Ellipse/Selection:
+                    // Once started, continue updating even outside the canvas using
+                    // clamped coordinates.
+                    if (rawInCanvas || isDragOutsideTool) {
+                        ToolEvent e = makeToolEventForActiveTool();
+                        tool->onDrag(*m_document, fi, e);
+                    }
+                }
+                else if (isMoveTool) {
+                    // Move:
+                    // Continue even outside the canvas using unclamped coordinates.
+                    // This allows Move to keep receiving real dx/dy while outside.
+                    ToolEvent e = makeToolEventForActiveTool();
                     tool->onDrag(*m_document, fi, e);
+                }
+                else {
+                    // Fill/Eyedropper or other click tools.
+                    if (rawInCanvas) {
+                        ToolEvent e = makeToolEventForActiveTool();
+                        tool->onDrag(*m_document, fi, e);
+                    }
                 }
             }
         }

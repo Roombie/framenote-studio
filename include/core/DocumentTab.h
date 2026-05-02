@@ -48,6 +48,9 @@ struct DocumentTab {
     bool paletteGestureStartedOnSelected = false;
     int  paletteGestureStartIndex = -1;
 
+    // Canvas input state — persisted across frames
+    bool canvasToolDragArmed = false;
+
     // Floating selection (Move tool) — pixels lifted off the canvas
     bool                   hasFloating    = false;
     FloatingSource         floatingSource = FloatingSource::None;
