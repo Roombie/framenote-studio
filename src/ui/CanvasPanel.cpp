@@ -98,52 +98,8 @@ void CanvasPanel::render() {
 
     ImDrawList* dl = ImGui::GetWindowDrawList();
 
-    // ── Canvas base ────────────────────────────────────────────────────────
-    ImTextureID checker = (ImTextureID)(intptr_t)m_renderer->checkerboardTexture();
+    drawCanvasBase(dl, originX, originY, canvasW, canvasH);
 
-    dl->AddImage(
-        checker,
-        {originX, originY},
-        {originX + canvasW, originY + canvasH}
-    );
-
-    if (m_timeline->onionSkinEnabled() && m_timeline->currentFrame() > 0) {
-        ImTextureID onion = (ImTextureID)(intptr_t)m_renderer->onionTexture();
-
-        uint8_t alpha = static_cast<uint8_t>(
-            m_timeline->onionSkinOpacity() * 255.0f
-        );
-
-        ImU32 tint = IM_COL32(100, 180, 255, alpha);
-
-        dl->AddImage(
-            onion,
-            {originX, originY},
-            {originX + canvasW, originY + canvasH},
-            {0, 0},
-            {1, 1},
-            tint
-        );
-    }
-
-    ImTextureID tid = (ImTextureID)(intptr_t)m_renderer->canvasTexture();
-
-    dl->AddImage(
-        tid,
-        {originX, originY},
-        {originX + canvasW, originY + canvasH}
-    );
-
-    dl->AddRect(
-        {originX, originY},
-        {originX + canvasW, originY + canvasH},
-        IM_COL32(80, 80, 80, 255),
-        0.0f,
-        0,
-        2.0f
-    );
-
-    // ── Clipped canvas overlays ────────────────────────────────────────────
     dl->PushClipRect(
         {originX, originY},
         {originX + canvasW, originY + canvasH},
@@ -156,46 +112,7 @@ void CanvasPanel::render() {
 
     dl->PopClipRect();
 
-    // ── Rubber band selection preview ──────────────────────────────────────
-    if (m_toolManager->activeToolType() == ToolType::Select) {
-        auto* selTool = static_cast<SelectionTool*>(m_toolManager->activeTool());
-
-        if (selTool && selTool->isSelecting()) {
-            int x0 = std::min(selTool->startX(), selTool->endX());
-            int y0 = std::min(selTool->startY(), selTool->endY());
-            int x1 = std::max(selTool->startX(), selTool->endX());
-            int y1 = std::max(selTool->startY(), selTool->endY());
-
-            float rx0 = originX + x0 * m_zoom;
-            float ry0 = originY + y0 * m_zoom;
-            float rx1 = originX + (x1 + 1) * m_zoom;
-            float ry1 = originY + (y1 + 1) * m_zoom;
-
-            dl->AddRectFilled(
-                {rx0, ry0},
-                {rx1, ry1},
-                IM_COL32(44, 184, 213, 40)
-            );
-
-            dl->AddRect(
-                {rx0 - 1, ry0 - 1},
-                {rx1 + 1, ry1 + 1},
-                IM_COL32(0, 0, 0, 180),
-                0.0f,
-                0,
-                1.5f
-            );
-
-            dl->AddRect(
-                {rx0, ry0},
-                {rx1, ry1},
-                IM_COL32(44, 184, 213, 220),
-                0.0f,
-                0,
-                1.0f
-            );
-        }
-    }
+    drawRubberBandSelectionPreview(dl, originX, originY);
 
     // ── Canvas input region ─────────────────────────────────────────────────
     ImVec2 canvasMin = {originX, originY};
@@ -1105,6 +1022,106 @@ void CanvasPanel::drawFloatingPixels(
             );
         }
     }
+}
+
+void CanvasPanel::drawCanvasBase(
+    ImDrawList* dl,
+    float originX,
+    float originY,
+    float canvasW,
+    float canvasH
+) {
+    ImTextureID checker = (ImTextureID)(intptr_t)m_renderer->checkerboardTexture();
+
+    dl->AddImage(
+        checker,
+        {originX, originY},
+        {originX + canvasW, originY + canvasH}
+    );
+
+    if (m_timeline->onionSkinEnabled() && m_timeline->currentFrame() > 0) {
+        ImTextureID onion = (ImTextureID)(intptr_t)m_renderer->onionTexture();
+
+        uint8_t alpha = static_cast<uint8_t>(
+            m_timeline->onionSkinOpacity() * 255.0f
+        );
+
+        ImU32 tint = IM_COL32(100, 180, 255, alpha);
+
+        dl->AddImage(
+            onion,
+            {originX, originY},
+            {originX + canvasW, originY + canvasH},
+            {0, 0},
+            {1, 1},
+            tint
+        );
+    }
+
+    ImTextureID tid = (ImTextureID)(intptr_t)m_renderer->canvasTexture();
+
+    dl->AddImage(
+        tid,
+        {originX, originY},
+        {originX + canvasW, originY + canvasH}
+    );
+
+    dl->AddRect(
+        {originX, originY},
+        {originX + canvasW, originY + canvasH},
+        IM_COL32(80, 80, 80, 255),
+        0.0f,
+        0,
+        2.0f
+    );
+}
+
+void CanvasPanel::drawRubberBandSelectionPreview(
+    ImDrawList* dl,
+    float originX,
+    float originY
+) {
+    if (m_toolManager->activeToolType() != ToolType::Select)
+        return;
+
+    auto* selTool = static_cast<SelectionTool*>(m_toolManager->activeTool());
+
+    if (!selTool || !selTool->isSelecting())
+        return;
+
+    int x0 = std::min(selTool->startX(), selTool->endX());
+    int y0 = std::min(selTool->startY(), selTool->endY());
+    int x1 = std::max(selTool->startX(), selTool->endX());
+    int y1 = std::max(selTool->startY(), selTool->endY());
+
+    float rx0 = originX + x0 * m_zoom;
+    float ry0 = originY + y0 * m_zoom;
+    float rx1 = originX + (x1 + 1) * m_zoom;
+    float ry1 = originY + (y1 + 1) * m_zoom;
+
+    dl->AddRectFilled(
+        {rx0, ry0},
+        {rx1, ry1},
+        IM_COL32(44, 184, 213, 40)
+    );
+
+    dl->AddRect(
+        {rx0 - 1, ry0 - 1},
+        {rx1 + 1, ry1 + 1},
+        IM_COL32(0, 0, 0, 180),
+        0.0f,
+        0,
+        1.5f
+    );
+
+    dl->AddRect(
+        {rx0, ry0},
+        {rx1, ry1},
+        IM_COL32(44, 184, 213, 220),
+        0.0f,
+        0,
+        1.0f
+    );
 }
 
 void CanvasPanel::drawDash(

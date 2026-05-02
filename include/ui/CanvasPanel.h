@@ -34,6 +34,21 @@ public:
 private:
     void handleInput(float originX, float originY, float canvasW, float canvasH);
 
+    // ── Canvas base rendering ─────────────────────────────────────────────────
+    void drawCanvasBase(
+        ImDrawList* dl,
+        float originX,
+        float originY,
+        float canvasW,
+        float canvasH
+    );
+
+    void drawRubberBandSelectionPreview(
+        ImDrawList* dl,
+        float originX,
+        float originY
+    );
+
     // ── Editor actions ─────────────────────────────────────────────────────
     void commitFloatIfNeeded();
     void pushCurrentFrameSnapshot();
