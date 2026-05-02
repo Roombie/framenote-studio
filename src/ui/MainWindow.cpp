@@ -1,24 +1,27 @@
 #include "ui/MainWindow.h"
+
+#include "core/Frame.h"
+#include "core/History.h"
+#include "io/FileDialog.h"
 #include "io/FileManager.h"
+#include "ui/ModalUtils.h"
+#include "ui/Theme.h"
+
+#include <SDL3/SDL.h>
+#include <imgui.h>
 
 #include <algorithm>
 #include <cctype>
 #include <filesystem>
 #include <sstream>
-#include <vector>
-
-#include "ui/Theme.h"
-#include "io/FileManager.h"
-#include "io/FileDialog.h"
-#include "core/Frame.h"
-#include "core/History.h"
-#include <imgui.h>
-#include <SDL3/SDL.h>
 #include <string>
+#include <utility>
+#include <vector>
 
 namespace Framenote {
 
-static const char* FILTER_FRAMENOTE = "Framenote Files\0*.framenote\0All Files\0*.*\0";
+static const char* FILTER_FRAMENOTE =
+    "Framenote Files\0*.framenote\0All Files\0*.*\0";
 
 static std::string toLowerCopy(std::string s) {
     std::transform(
@@ -109,36 +112,53 @@ static std::string joinImportErrors(const std::vector<std::string>& errors) {
     return oss.str();
 }
 
-// Captures all frames + canvas size as a HistoryEntry to pass into undo/redo
+// Captures all frames + canvas size as a HistoryEntry to pass into undo/redo.
 static HistoryEntry captureCurrentEntry(DocumentTab* tab) {
     HistoryEntry entry;
+
     entry.canvasWidth  = tab->document->canvasSize().width;
     entry.canvasHeight = tab->document->canvasSize().height;
+
     for (int i = 0; i < tab->document->frameCount(); ++i) {
         auto& f = tab->document->frame(i);
+
         Snapshot s;
         s.frameIndex   = i;
         s.bufferWidth  = f.bufferWidth();
         s.bufferHeight = f.bufferHeight();
         s.pixels       = f.pixels();
+
         entry.frames.push_back(std::move(s));
     }
+
     return entry;
 }
 
-// Applies a restored HistoryEntry — handles both drawing and resize entries
+// Applies a restored HistoryEntry — handles both drawing and resize entries.
 static void applyHistoryEntry(DocumentTab* tab, HistoryEntry& entry) {
     if (entry.canvasWidth > 0 &&
         (entry.canvasWidth  != tab->document->canvasSize().width ||
          entry.canvasHeight != tab->document->canvasSize().height)) {
+
         tab->document->setCanvasSize(entry.canvasWidth, entry.canvasHeight);
         tab->renderer->resize(entry.canvasWidth, entry.canvasHeight);
-        for (int i = 0; i < tab->document->frameCount(); ++i)
-            tab->document->frame(i).setVisibleSize(entry.canvasWidth, entry.canvasHeight);
+
+        for (int i = 0; i < tab->document->frameCount(); ++i) {
+            tab->document->frame(i).setVisibleSize(
+                entry.canvasWidth,
+                entry.canvasHeight
+            );
+        }
     }
-    for (auto& snap : entry.frames)
+
+    for (auto& snap : entry.frames) {
         tab->document->frame(snap.frameIndex).restoreBuffer(
-            std::move(snap.pixels), snap.bufferWidth, snap.bufferHeight);
+            std::move(snap.pixels),
+            snap.bufferWidth,
+            snap.bufferHeight
+        );
+    }
+
     tab->document->markDirty();
 }
 
@@ -148,30 +168,37 @@ MainWindow::MainWindow(TabManager* tabManager, ToolManager* toolManager)
 {}
 
 void MainWindow::showError(const std::string& msg) {
-    m_errorMsg        = msg;
+    m_errorMsg = msg;
     m_showErrorDialog = true;
 }
 
 void MainWindow::renderErrorDialog() {
     if (m_showErrorDialog) {
-        ImGui::SetNextWindowPos(
-            ImGui::GetMainViewport()->GetCenter(),
-            ImGuiCond_Always, {0.5f, 0.5f});
         ImGui::OpenPopup("Error##errDlg");
         m_showErrorDialog = false;
     }
-    ImGui::SetNextWindowPos(
-        ImGui::GetMainViewport()->GetCenter(),
-        ImGuiCond_Always, {0.5f, 0.5f});
+
+    ModalUtils::centerNextWindowOnAppearing();
+
     ImGui::SetNextWindowSizeConstraints({320, 0}, {600, 400});
-    if (ImGui::BeginPopupModal("Error##errDlg", nullptr,
+
+    if (ImGui::BeginPopupModal(
+            "Error##errDlg",
+            nullptr,
             ImGuiWindowFlags_AlwaysAutoResize)) {
+
+        ModalUtils::keepCurrentWindowInsideMainViewport();
+
         ImGui::TextWrapped("%s", m_errorMsg.c_str());
+
         ImGui::Spacing();
         ImGui::Separator();
         ImGui::Spacing();
-        if (ImGui::Button("OK", {100, 0}))
+
+        if (ImGui::Button("OK", {100, 0})) {
             ImGui::CloseCurrentPopup();
+        }
+
         ImGui::EndPopup();
     }
 }
@@ -202,8 +229,10 @@ bool MainWindow::doSave(DocumentTab* tab, const std::string& path) {
 
 void MainWindow::render() {
     renderMenuBar();
+
     m_tabManager->render(*m_toolManager);
     m_tabManager->autosaveDirtyTabs(ImGui::GetTime());
+
     renderCanvasSizeDialog();
     renderExportDialog();
     renderOnionOpacityDialog();
@@ -212,36 +241,46 @@ void MainWindow::render() {
 
     // -- Global keyboard shortcuts ---------------------------------------------
     ImGuiIO& io = ImGui::GetIO();
+
     if (!io.WantTextInput) {
         bool ctrl  = io.KeyCtrl;
         bool shift = io.KeyShift;
 
         // Ctrl+N -- New document
-        if (ctrl && ImGui::IsKeyPressed(ImGuiKey_N, false))
+        if (ctrl && ImGui::IsKeyPressed(ImGuiKey_N, false)) {
             m_tabManager->showNewDialog();
+        }
 
         // Ctrl+O -- Open file
         if (ctrl && ImGui::IsKeyPressed(ImGuiKey_O, false)) {
             std::string path = FileDialog::openFile(
-                FILTER_FRAMENOTE, "Open Framenote File");
+                FILTER_FRAMENOTE,
+                "Open Framenote File"
+            );
+
             if (!path.empty()) {
                 std::string err;
                 auto doc = FileManager::load(path, err);
+
                 if (doc) {
-                    std::string name = path.substr(path.find_last_of("/\\") + 1);
+                    std::string name = pathFilename(path);
+
                     m_tabManager->openDocument(std::move(doc), name, path);
 
                     if (auto* opened = m_tabManager->activeTab()) {
-                        m_tabManager->recordRecentFile(path, *opened->document);
+                        m_tabManager->recordRecentFile(
+                            path,
+                            *opened->document
+                        );
                     }
-
-                } else {
+                }
+                else {
                     m_statusMsg = "Open failed: " + err;
                 }
             }
         }
 
-        // Ctrl+S -- Save
+        // Ctrl+S -- Save project
         if (ctrl && !shift && ImGui::IsKeyPressed(ImGuiKey_S, false)) {
             auto* tab = m_tabManager->activeTab();
 
@@ -250,7 +289,7 @@ void MainWindow::render() {
                     std::string path = FileDialog::saveFile(
                         FILTER_FRAMENOTE,
                         "framenote",
-                        "Save Framenote File"
+                        "Save Framenote Project"
                     );
 
                     if (!path.empty()) {
@@ -263,7 +302,7 @@ void MainWindow::render() {
             }
         }
 
-        // Ctrl+Shift+S -- Save As
+        // Ctrl+Shift+S -- Save Project As
         if (ctrl && shift && ImGui::IsKeyPressed(ImGuiKey_S, false)) {
             auto* tab = m_tabManager->activeTab();
 
@@ -271,7 +310,7 @@ void MainWindow::render() {
                 std::string path = FileDialog::saveFile(
                     FILTER_FRAMENOTE,
                     "framenote",
-                    "Save As"
+                    "Save Framenote Project As"
                 );
 
                 if (!path.empty()) {
@@ -283,6 +322,7 @@ void MainWindow::render() {
         // C -- Canvas Size
         if (!ctrl && ImGui::IsKeyPressed(ImGuiKey_C, false)) {
             auto* tab = m_tabManager->activeTab();
+
             if (tab) {
                 m_showCanvasSizeDialog = true;
                 m_newCanvasW = tab->document->canvasSize().width;
@@ -293,27 +333,39 @@ void MainWindow::render() {
         // O -- Toggle onion skin
         if (!ctrl && ImGui::IsKeyPressed(ImGuiKey_O, false)) {
             auto* tab = m_tabManager->activeTab();
-            if (tab)
-                tab->timeline->setOnionSkin(!tab->timeline->onionSkinEnabled());
+
+            if (tab) {
+                tab->timeline->setOnionSkin(
+                    !tab->timeline->onionSkinEnabled()
+                );
+            }
         }
 
         // Ctrl+Z -- Undo
         if (ctrl && ImGui::IsKeyPressed(ImGuiKey_Z, false)) {
             auto* tab = m_tabManager->activeTab();
+
             if (tab && tab->history->canUndo()) {
                 HistoryEntry current = captureCurrentEntry(tab);
-                HistoryEntry restored = tab->history->undo(std::move(current));
+                HistoryEntry restored =
+                    tab->history->undo(std::move(current));
+
                 applyHistoryEntry(tab, restored);
             }
         }
 
         // Ctrl+Y / Ctrl+Shift+Z -- Redo
-        if (ctrl && (ImGui::IsKeyPressed(ImGuiKey_Y, false) ||
-                     (shift && ImGui::IsKeyPressed(ImGuiKey_Z, false)))) {
+        if (ctrl &&
+            (ImGui::IsKeyPressed(ImGuiKey_Y, false) ||
+             (shift && ImGui::IsKeyPressed(ImGuiKey_Z, false)))) {
+
             auto* tab = m_tabManager->activeTab();
+
             if (tab && tab->history->canRedo()) {
                 HistoryEntry current = captureCurrentEntry(tab);
-                HistoryEntry restored = tab->history->redo(std::move(current));
+                HistoryEntry restored =
+                    tab->history->redo(std::move(current));
+
                 applyHistoryEntry(tab, restored);
             }
         }
@@ -325,28 +377,38 @@ void MainWindow::renderMenuBar() {
 
         // -- File --------------------------------------------------------------
         if (ImGui::BeginMenu("File")) {
-            auto* tab    = m_tabManager->activeTab();
-            bool hasTab  = tab != nullptr;
+            auto* tab = m_tabManager->activeTab();
+
+            bool hasTab = tab != nullptr;
             bool isDirty = hasTab && tab->document->isDirty();
 
-            if (ImGui::MenuItem("New", "Ctrl+N"))
+            if (ImGui::MenuItem("New", "Ctrl+N")) {
                 m_tabManager->showNewDialog();
+            }
 
             if (ImGui::MenuItem("Open...", "Ctrl+O")) {
                 std::string path = FileDialog::openFile(
-                    FILTER_FRAMENOTE, "Open Framenote File");
+                    FILTER_FRAMENOTE,
+                    "Open Framenote File"
+                );
+
                 if (!path.empty()) {
                     std::string err;
                     auto doc = FileManager::load(path, err);
+
                     if (doc) {
-                        std::string name = path.substr(path.find_last_of("/\\") + 1);
+                        std::string name = pathFilename(path);
+
                         m_tabManager->openDocument(std::move(doc), name, path);
 
                         if (auto* opened = m_tabManager->activeTab()) {
-                            m_tabManager->recordRecentFile(path, *opened->document);
+                            m_tabManager->recordRecentFile(
+                                path,
+                                *opened->document
+                            );
                         }
-
-                    } else {
+                    }
+                    else {
                         m_statusMsg = "Open failed: " + err;
                     }
                 }
@@ -354,15 +416,15 @@ void MainWindow::renderMenuBar() {
 
             ImGui::Separator();
 
-            // Save -- only enabled when there are unsaved changes
+            // Save project -- only enabled when there are unsaved changes
             ImGui::BeginDisabled(!isDirty);
 
-            if (ImGui::MenuItem("Save", "Ctrl+S")) {
+            if (ImGui::MenuItem("Save Project", "Ctrl+S")) {
                 if (tab->document->filePath().empty()) {
                     std::string path = FileDialog::saveFile(
                         FILTER_FRAMENOTE,
                         "framenote",
-                        "Save Framenote File"
+                        "Save Framenote Project"
                     );
 
                     if (!path.empty()) {
@@ -376,14 +438,14 @@ void MainWindow::renderMenuBar() {
 
             ImGui::EndDisabled();
 
-            // Save As -- enabled whenever a tab is open
+            // Save Project As -- enabled whenever a tab is open
             ImGui::BeginDisabled(!hasTab);
 
-            if (ImGui::MenuItem("Save As...", "Ctrl+Shift+S")) {
+            if (ImGui::MenuItem("Save Project As...", "Ctrl+Shift+S")) {
                 std::string path = FileDialog::saveFile(
                     FILTER_FRAMENOTE,
                     "framenote",
-                    "Save As"
+                    "Save Framenote Project As"
                 );
 
                 if (!path.empty()) {
@@ -395,8 +457,9 @@ void MainWindow::renderMenuBar() {
 
             ImGui::Separator();
 
-            // Export -- only when tab open
+            // Export -- only when a tab is open
             ImGui::BeginDisabled(!hasTab);
+
             if (ImGui::BeginMenu("Export")) {
                 if (ImGui::MenuItem("Export Animation as GIF...")) {
                     m_exportType = ExportType::GIF;
@@ -415,38 +478,53 @@ void MainWindow::renderMenuBar() {
 
                 ImGui::EndMenu();
             }
+
             ImGui::EndDisabled();
 
             ImGui::Separator();
+
             if (ImGui::MenuItem("Quit", "Alt+F4")) {
-                SDL_Event e; e.type = SDL_EVENT_QUIT;
+                SDL_Event e;
+                e.type = SDL_EVENT_QUIT;
                 SDL_PushEvent(&e);
             }
+
             ImGui::EndMenu();
         }
 
         // -- Edit --------------------------------------------------------------
         if (ImGui::BeginMenu("Edit")) {
-            auto* tab    = m_tabManager->activeTab();
+            auto* tab = m_tabManager->activeTab();
+
             bool canUndo = tab && tab->history->canUndo();
             bool canRedo = tab && tab->history->canRedo();
 
             ImGui::BeginDisabled(!canUndo);
+
             if (ImGui::MenuItem("Undo", "Ctrl+Z")) {
                 if (tab) {
-                    HistoryEntry restored = tab->history->undo(captureCurrentEntry(tab));
+                    HistoryEntry current = captureCurrentEntry(tab);
+                    HistoryEntry restored =
+                        tab->history->undo(std::move(current));
+
                     applyHistoryEntry(tab, restored);
                 }
             }
+
             ImGui::EndDisabled();
 
             ImGui::BeginDisabled(!canRedo);
+
             if (ImGui::MenuItem("Redo", "Ctrl+Y")) {
                 if (tab) {
-                    HistoryEntry restored = tab->history->redo(captureCurrentEntry(tab));
+                    HistoryEntry current = captureCurrentEntry(tab);
+                    HistoryEntry restored =
+                        tab->history->redo(std::move(current));
+
                     applyHistoryEntry(tab, restored);
                 }
             }
+
             ImGui::EndDisabled();
 
             ImGui::EndMenu();
@@ -454,41 +532,57 @@ void MainWindow::renderMenuBar() {
 
         // -- Sprite ------------------------------------------------------------
         if (ImGui::BeginMenu("Sprite")) {
-            auto* tab   = m_tabManager->activeTab();
+            auto* tab = m_tabManager->activeTab();
+
             bool hasTab = tab != nullptr;
 
             ImGui::BeginDisabled(!hasTab);
+
             if (ImGui::MenuItem("Canvas Size...", "C")) {
                 m_showCanvasSizeDialog = true;
                 m_newCanvasW = tab->document->canvasSize().width;
                 m_newCanvasH = tab->document->canvasSize().height;
             }
+
             ImGui::EndDisabled();
+
             ImGui::EndMenu();
         }
 
         // -- View --------------------------------------------------------------
         if (ImGui::BeginMenu("View")) {
-            const char* themeLabel = Theme::current() == ThemeMode::Dark
-                ? "Switch to Light Mode" : "Switch to Dark Mode";
-            if (ImGui::MenuItem(themeLabel)) Theme::toggle();
+            const char* themeLabel =
+                Theme::current() == ThemeMode::Dark
+                    ? "Switch to Light Mode"
+                    : "Switch to Dark Mode";
+
+            if (ImGui::MenuItem(themeLabel)) {
+                Theme::toggle();
+            }
 
             ImGui::Separator();
 
-            auto* tab   = m_tabManager->activeTab();
+            auto* tab = m_tabManager->activeTab();
             bool hasTab = tab != nullptr;
 
             ImGui::BeginDisabled(!hasTab);
+
             if (hasTab) {
                 bool onion = tab->timeline->onionSkinEnabled();
-                if (ImGui::MenuItem("Onion Skin", "O", &onion))
+
+                if (ImGui::MenuItem("Onion Skin", "O", &onion)) {
                     tab->timeline->setOnionSkin(onion);
-                if (ImGui::MenuItem("Onion Skin Opacity..."))
+                }
+
+                if (ImGui::MenuItem("Onion Skin Opacity...")) {
                     m_showOnionDialog = true;
-            } else {
+                }
+            }
+            else {
                 ImGui::MenuItem("Onion Skin", "O");
                 ImGui::MenuItem("Onion Skin Opacity...");
             }
+
             ImGui::EndDisabled();
 
             ImGui::EndMenu();
@@ -496,23 +590,31 @@ void MainWindow::renderMenuBar() {
 
         // -- Help --------------------------------------------------------------
         if (ImGui::BeginMenu("Help")) {
-            if (ImGui::MenuItem("About")) m_showAbout = true;
+            if (ImGui::MenuItem("About")) {
+                m_showAbout = true;
+            }
+
             ImGui::EndMenu();
         }
 
-        // Status bar
+        // Status area
         auto* tab = m_tabManager->activeTab();
+
         if (tab) {
             ImGui::SetCursorPosX(ImGui::GetCursorPosX() + 20);
-            ImGui::TextDisabled("Frame %d/%d  |  %dx%d  |  %d fps  %s  %s",
+
+            ImGui::TextDisabled(
+                "Frame %d/%d  |  %dx%d  |  %d fps  %s  %s",
                 tab->timeline->currentFrame() + 1,
                 tab->document->frameCount(),
                 tab->document->canvasSize().width,
                 tab->document->canvasSize().height,
                 tab->timeline->fps(),
                 tab->document->isDirty() ? "[unsaved]" : "",
-                m_statusMsg.c_str());
-        } else if (!m_statusMsg.empty()) {
+                m_statusMsg.c_str()
+            );
+        }
+        else if (!m_statusMsg.empty()) {
             ImGui::SetCursorPosX(ImGui::GetCursorPosX() + 20);
             ImGui::TextDisabled("%s", m_statusMsg.c_str());
         }
@@ -521,69 +623,140 @@ void MainWindow::renderMenuBar() {
     }
 
     // -- About modal -----------------------------------------------------------
-    if (m_showAbout) ImGui::OpenPopup("About##modal");
-    if (ImGui::BeginPopupModal("About##modal", nullptr,
+    if (m_showAbout) {
+        ImGui::OpenPopup("About##modal");
+        m_showAbout = false;
+    }
+
+    ModalUtils::centerNextWindowOnAppearing();
+
+    if (ImGui::BeginPopupModal(
+            "About##modal",
+            nullptr,
             ImGuiWindowFlags_AlwaysAutoResize)) {
+
+        ModalUtils::keepCurrentWindowInsideMainViewport();
+
         ImGui::Text("Framenote Studio v0.2.0");
         ImGui::Text("Mascot: Nibbit :)");
         ImGui::Separator();
         ImGui::Text("Built with SDL3 + Dear ImGui");
-        if (ImGui::Button("Close")) {
-            m_showAbout = false;
+
+        ImGui::Spacing();
+
+        if (ImGui::Button("Close", {100, 0})) {
             ImGui::CloseCurrentPopup();
         }
+
         ImGui::EndPopup();
     }
 }
 
 void MainWindow::renderCanvasSizeDialog() {
-    if (m_showCanvasSizeDialog) ImGui::OpenPopup("Canvas Size##dlg");
+    if (m_showCanvasSizeDialog) {
+        ImGui::OpenPopup("Canvas Size##dlg");
+        m_showCanvasSizeDialog = false;
+    }
 
-    if (ImGui::BeginPopupModal("Canvas Size##dlg", nullptr,
+    ModalUtils::centerNextWindowOnAppearing();
+
+    if (ImGui::BeginPopupModal(
+            "Canvas Size##dlg",
+            nullptr,
             ImGuiWindowFlags_AlwaysAutoResize)) {
 
+        ModalUtils::keepCurrentWindowInsideMainViewport();
+
         auto* tab = m_tabManager->activeTab();
-        if (!tab) { ImGui::CloseCurrentPopup(); ImGui::EndPopup(); return; }
 
-        ImGui::Text("Current: %dx%d",
+        if (!tab) {
+            ImGui::CloseCurrentPopup();
+            ImGui::EndPopup();
+            return;
+        }
+
+        ImGui::Text(
+            "Current: %dx%d",
             tab->document->canvasSize().width,
-            tab->document->canvasSize().height);
-        ImGui::Separator();
-        ImGui::SetNextItemWidth(120); ImGui::InputInt("Width##cs",  &m_newCanvasW);
-        ImGui::SetNextItemWidth(120); ImGui::InputInt("Height##cs", &m_newCanvasH);
-        if (m_newCanvasW <    1) m_newCanvasW =    1;
-        if (m_newCanvasH <    1) m_newCanvasH =    1;
-        if (m_newCanvasW > 4096) m_newCanvasW = 4096;
-        if (m_newCanvasH > 4096) m_newCanvasH = 4096;
+            tab->document->canvasSize().height
+        );
 
         ImGui::Separator();
+
+        ImGui::SetNextItemWidth(120);
+        ImGui::InputInt("Width##cs", &m_newCanvasW);
+
+        ImGui::SetNextItemWidth(120);
+        ImGui::InputInt("Height##cs", &m_newCanvasH);
+
+        m_newCanvasW = std::clamp(m_newCanvasW, 1, 4096);
+        m_newCanvasH = std::clamp(m_newCanvasH, 1, 4096);
+
+        ImGui::Separator();
+
         ImGui::Text("Presets:");
-        ImGui::SameLine(); if (ImGui::SmallButton("16"))  { m_newCanvasW=16;  m_newCanvasH=16;  }
-        ImGui::SameLine(); if (ImGui::SmallButton("32"))  { m_newCanvasW=32;  m_newCanvasH=32;  }
-        ImGui::SameLine(); if (ImGui::SmallButton("64"))  { m_newCanvasW=64;  m_newCanvasH=64;  }
-        ImGui::SameLine(); if (ImGui::SmallButton("128")) { m_newCanvasW=128; m_newCanvasH=128; }
-        ImGui::SameLine(); if (ImGui::SmallButton("256")) { m_newCanvasW=256; m_newCanvasH=256; }
+
+        ImGui::SameLine();
+
+        if (ImGui::SmallButton("16")) {
+            m_newCanvasW = 16;
+            m_newCanvasH = 16;
+        }
+
+        ImGui::SameLine();
+
+        if (ImGui::SmallButton("32")) {
+            m_newCanvasW = 32;
+            m_newCanvasH = 32;
+        }
+
+        ImGui::SameLine();
+
+        if (ImGui::SmallButton("64")) {
+            m_newCanvasW = 64;
+            m_newCanvasH = 64;
+        }
+
+        ImGui::SameLine();
+
+        if (ImGui::SmallButton("128")) {
+            m_newCanvasW = 128;
+            m_newCanvasH = 128;
+        }
+
+        ImGui::SameLine();
+
+        if (ImGui::SmallButton("256")) {
+            m_newCanvasW = 256;
+            m_newCanvasH = 256;
+        }
+
         ImGui::Separator();
 
         if (ImGui::Button("OK", {80, 0})) {
             int oldW = tab->document->canvasSize().width;
             int oldH = tab->document->canvasSize().height;
+
             if (m_newCanvasW != oldW || m_newCanvasH != oldH) {
-                // Snapshot all frames as a single atomic resize entry
                 std::vector<Snapshot> frameSnaps;
+
                 for (int i = 0; i < tab->document->frameCount(); ++i) {
                     auto& f = tab->document->frame(i);
+
                     Snapshot snap;
-                    snap.frameIndex   = i;
-                    snap.bufferWidth  = f.bufferWidth();
+                    snap.frameIndex = i;
+                    snap.bufferWidth = f.bufferWidth();
                     snap.bufferHeight = f.bufferHeight();
-                    snap.pixels       = f.pixels();
+                    snap.pixels = f.pixels();
+
                     frameSnaps.push_back(std::move(snap));
                 }
+
                 tab->history->pushResize(std::move(frameSnaps), oldW, oldH);
 
                 for (int i = 0; i < tab->document->frameCount(); ++i) {
                     auto& frame = tab->document->frame(i);
+
                     frame.expandBuffer(m_newCanvasW, m_newCanvasH);
                     frame.setVisibleSize(m_newCanvasW, m_newCanvasH);
                 }
@@ -592,48 +765,77 @@ void MainWindow::renderCanvasSizeDialog() {
                 tab->renderer->resize(m_newCanvasW, m_newCanvasH);
                 tab->document->markDirty();
             }
-            m_showCanvasSizeDialog = false;
+
             ImGui::CloseCurrentPopup();
         }
+
         ImGui::SameLine();
+
         if (ImGui::Button("Cancel", {80, 0})) {
-            m_showCanvasSizeDialog = false;
             ImGui::CloseCurrentPopup();
         }
+
         ImGui::EndPopup();
     }
 }
 
 void MainWindow::renderOnionOpacityDialog() {
-    if (m_showOnionDialog) ImGui::OpenPopup("Onion Skin Opacity##dlg");
+    if (m_showOnionDialog) {
+        ImGui::OpenPopup("Onion Skin Opacity##dlg");
+        m_showOnionDialog = false;
+    }
 
-    if (ImGui::BeginPopupModal("Onion Skin Opacity##dlg", nullptr,
+    ModalUtils::centerNextWindowOnAppearing();
+
+    if (ImGui::BeginPopupModal(
+            "Onion Skin Opacity##dlg",
+            nullptr,
             ImGuiWindowFlags_AlwaysAutoResize)) {
 
+        ModalUtils::keepCurrentWindowInsideMainViewport();
+
         auto* tab = m_tabManager->activeTab();
-        if (!tab) { ImGui::CloseCurrentPopup(); ImGui::EndPopup(); return; }
+
+        if (!tab) {
+            ImGui::CloseCurrentPopup();
+            ImGui::EndPopup();
+            return;
+        }
 
         bool onion = tab->timeline->onionSkinEnabled();
-        if (ImGui::Checkbox("Enabled", &onion))
+
+        if (ImGui::Checkbox("Enabled", &onion)) {
             tab->timeline->setOnionSkin(onion);
+        }
 
         ImGui::Spacing();
+
         ImGui::Text("Opacity:");
+
         float opacityPct = tab->timeline->onionSkinOpacity() * 100.0f;
+
         ImGui::SetNextItemWidth(220);
-        if (ImGui::SliderFloat("##onionpct", &opacityPct, 5.0f, 100.0f, "%.0f%%",
-                ImGuiSliderFlags_AlwaysClamp))
+
+        if (ImGui::SliderFloat(
+                "##onionpct",
+                &opacityPct,
+                5.0f,
+                100.0f,
+                "%.0f%%",
+                ImGuiSliderFlags_AlwaysClamp)) {
+
             tab->timeline->setOnionSkinOpacity(opacityPct / 100.0f);
+        }
 
         ImGui::Spacing();
         ImGui::Separator();
-        if (ImGui::Button("Close", {80, 0})) {
-            m_showOnionDialog = false;
+
+        if (ImGui::Button("Close", {100, 0})) {
             ImGui::CloseCurrentPopup();
         }
+
         ImGui::EndPopup();
     }
-    m_showOnionDialog = false;
 }
 
 // ── Drag/drop import ──────────────────────────────────────────────────────────
@@ -671,7 +873,13 @@ void MainWindow::finishDropBatch() {
     size_t compatibleCount = compatibleDroppedFileCount();
 
     if (compatibleCount == 0) {
-        showError("No compatible files were dropped.\n\nSupported files:\n- .framenote\n- .png");
+        showError(
+            "No compatible files were dropped.\n\n"
+            "Supported files:\n"
+            "- .framenote\n"
+            "- .png"
+        );
+
         m_dropFiles.clear();
         return;
     }
@@ -694,6 +902,7 @@ MainWindow::DroppedFileInfo MainWindow::classifyDroppedFile(
     const std::string& path
 ) const {
     DroppedFileInfo info;
+
     info.path = path;
     info.name = pathFilename(path);
 
@@ -716,8 +925,9 @@ size_t MainWindow::droppedFileCount(DroppedFileType type) const {
     size_t count = 0;
 
     for (const auto& file : m_dropFiles) {
-        if (file.type == type)
+        if (file.type == type) {
             ++count;
+        }
     }
 
     return count;
@@ -728,8 +938,10 @@ size_t MainWindow::compatibleDroppedFileCount() const {
            droppedFileCount(DroppedFileType::Png);
 }
 
-bool MainWindow::openDroppedFramenote(const std::string& path,
-                                      std::string& outError) {
+bool MainWindow::openDroppedFramenote(
+    const std::string& path,
+    std::string& outError
+) {
     auto doc = FileManager::load(path, outError);
 
     if (!doc)
@@ -746,8 +958,10 @@ bool MainWindow::openDroppedFramenote(const std::string& path,
     return true;
 }
 
-bool MainWindow::openDroppedPng(const std::string& path,
-                                std::string& outError) {
+bool MainWindow::openDroppedPng(
+    const std::string& path,
+    std::string& outError
+) {
     auto doc = FileManager::loadPngAsDocument(path, outError);
 
     if (!doc)
@@ -760,8 +974,10 @@ bool MainWindow::openDroppedPng(const std::string& path,
     return true;
 }
 
-bool MainWindow::openDroppedPngSequence(const std::vector<std::string>& paths,
-                                        std::string& outError) {
+bool MainWindow::openDroppedPngSequence(
+    const std::vector<std::string>& paths,
+    std::string& outError
+) {
     auto doc = FileManager::loadPngSequenceAsDocument(
         paths,
         8,
@@ -787,7 +1003,9 @@ bool MainWindow::openDroppedPngSequence(const std::vector<std::string>& paths,
 
 void MainWindow::processDroppedFiles() {
     int openedCount = 0;
-    int ignoredCount = static_cast<int>(droppedFileCount(DroppedFileType::Unsupported));
+
+    int ignoredCount =
+        static_cast<int>(droppedFileCount(DroppedFileType::Unsupported));
 
     std::vector<std::string> errors;
 
@@ -799,8 +1017,9 @@ void MainWindow::processDroppedFiles() {
         std::vector<std::string> pngPaths;
 
         for (const auto& file : m_dropFiles) {
-            if (file.type == DroppedFileType::Png)
+            if (file.type == DroppedFileType::Png) {
                 pngPaths.push_back(file.path);
+            }
         }
 
         if (!pngPaths.empty()) {
@@ -861,13 +1080,16 @@ void MainWindow::processDroppedFiles() {
         if (ignoredCount > 0) {
             m_statusMsg += " Ignored " + std::to_string(ignoredCount) +
                            " unsupported file";
+
             m_statusMsg += ignoredCount == 1 ? "." : "s.";
         }
     }
 
     if (!errors.empty()) {
-        showError("Some dropped files could not be opened:\n\n" +
-                  joinImportErrors(errors));
+        showError(
+            "Some dropped files could not be opened:\n\n" +
+            joinImportErrors(errors)
+        );
     }
 
     m_dropFiles.clear();
@@ -876,21 +1098,11 @@ void MainWindow::processDroppedFiles() {
 
 void MainWindow::renderDropImportDialog() {
     if (m_showDropImportDialog) {
-        ImGui::SetNextWindowPos(
-            ImGui::GetMainViewport()->GetCenter(),
-            ImGuiCond_Always,
-            {0.5f, 0.5f}
-        );
-
         ImGui::OpenPopup("Import Dropped Files##dropImport");
         m_showDropImportDialog = false;
     }
 
-    ImGui::SetNextWindowPos(
-        ImGui::GetMainViewport()->GetCenter(),
-        ImGuiCond_Always,
-        {0.5f, 0.5f}
-    );
+    ModalUtils::centerNextWindowOnAppearing();
 
     ImGui::SetNextWindowSizeConstraints({420, 0}, {680, 560});
 
@@ -898,11 +1110,16 @@ void MainWindow::renderDropImportDialog() {
             "Import Dropped Files##dropImport",
             nullptr,
             ImGuiWindowFlags_AlwaysAutoResize)) {
-        size_t pngCount        = droppedFileCount(DroppedFileType::Png);
-        size_t framenoteCount  = droppedFileCount(DroppedFileType::Framenote);
-        size_t unsupportedCount = droppedFileCount(DroppedFileType::Unsupported);
+
+        ModalUtils::keepCurrentWindowInsideMainViewport();
+
+        size_t pngCount = droppedFileCount(DroppedFileType::Png);
+        size_t framenoteCount = droppedFileCount(DroppedFileType::Framenote);
+        size_t unsupportedCount =
+            droppedFileCount(DroppedFileType::Unsupported);
 
         ImGui::Text("Dropped files:");
+
         ImGui::TextDisabled(
             "%d PNG  |  %d Framenote  |  %d unsupported",
             static_cast<int>(pngCount),
@@ -916,6 +1133,7 @@ void MainWindow::renderDropImportDialog() {
         if (ImGui::RadioButton(
                 "Open each compatible file as a separate tab",
                 m_dropImportMode == DropImportMode::SeparateTabs)) {
+
             m_dropImportMode = DropImportMode::SeparateTabs;
         }
 
@@ -924,6 +1142,7 @@ void MainWindow::renderDropImportDialog() {
         if (ImGui::RadioButton(
                 "Import PNG files as one animation sequence",
                 m_dropImportMode == DropImportMode::PngSequence)) {
+
             m_dropImportMode = DropImportMode::PngSequence;
         }
 
@@ -931,11 +1150,13 @@ void MainWindow::renderDropImportDialog() {
 
         if (pngCount == 0 &&
             m_dropImportMode == DropImportMode::PngSequence) {
+
             m_dropImportMode = DropImportMode::SeparateTabs;
         }
 
         if (m_dropImportMode == DropImportMode::PngSequence &&
             framenoteCount > 0) {
+
             ImGui::Checkbox(
                 "Also open dropped .framenote projects",
                 &m_dropOpenFramenoteFiles
@@ -1004,6 +1225,7 @@ void MainWindow::renderDropImportDialog() {
         if (ImGui::Button("Cancel##drop", {buttonWidth, 0})) {
             m_dropFiles.clear();
             m_dropBatchPaths.clear();
+
             ImGui::CloseCurrentPopup();
         }
 

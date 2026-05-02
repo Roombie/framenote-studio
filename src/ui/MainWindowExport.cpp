@@ -1,4 +1,5 @@
 #include "ui/MainWindow.h"
+#include "ui/ModalUtils.h"
 
 #include "io/FileDialog.h"
 #include "io/GifExporter.h"
@@ -38,21 +39,11 @@ void MainWindow::renderExportDialog() {
             m_exportPngFrame = tab->timeline->currentFrame() + 1;
         }
 
-        ImGui::SetNextWindowPos(
-            ImGui::GetMainViewport()->GetCenter(),
-            ImGuiCond_Always,
-            {0.5f, 0.5f}
-        );
-
         ImGui::OpenPopup("Export##settingsDlg");
         m_showExportDialog = false;
     }
 
-    ImGui::SetNextWindowPos(
-        ImGui::GetMainViewport()->GetCenter(),
-        ImGuiCond_Always,
-        {0.5f, 0.5f}
-    );
+    ModalUtils::centerNextWindowOnAppearing();
 
     ImGui::SetNextWindowSizeConstraints({380, 0}, {540, 700});
 
@@ -60,6 +51,8 @@ void MainWindow::renderExportDialog() {
             "Export##settingsDlg",
             nullptr,
             ImGuiWindowFlags_AlwaysAutoResize)) {
+
+        ModalUtils::keepCurrentWindowInsideMainViewport();
 
         auto* tab = m_tabManager->activeTab();
 

@@ -4,6 +4,7 @@
 #include "ui/ToolsPanel.h"
 #include "ui/PalettePanel.h"
 #include "ui/Theme.h"
+#include "ui/ModalUtils.h"
 #include "core/Selection.h"
 #include "tools/SelectionTool.h"
 #include "tools/MoveTool.h"
@@ -348,10 +349,14 @@ void TabManager::render(ToolManager& toolManager) {
         m_showNewDialog = false;
     }
 
+    ModalUtils::centerNextWindowOnAppearing();
+
     if (ImGui::BeginPopupModal(
             "New Document##dlg",
             nullptr,
             ImGuiWindowFlags_AlwaysAutoResize)) {
+        
+        ModalUtils::keepCurrentWindowInsideMainViewport();
 
         ImGui::InputText("Name##new", m_newDocName, sizeof(m_newDocName));
 
