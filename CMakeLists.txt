@@ -45,6 +45,9 @@ set(SOURCES
     src/ui/TabManager.cpp
     src/ui/PalettePanel.cpp
     src/ui/CanvasPanel.cpp
+    src/ui/CanvasPanelActions.cpp
+    src/ui/CanvasPanelInput.cpp
+    src/ui/CanvasPanelRender.cpp
     src/ui/IconLoader.cpp
 
     # I/O
