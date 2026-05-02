@@ -59,9 +59,6 @@ set(SOURCES
     src/io/RecentFiles.cpp
     src/io/RecoveryManager.cpp
     src/io/ExportRasterUtils.cpp
-    src/io/PngExporter.cpp
-    src/io/GifExporter.cpp
-
 
     # Dear ImGui (vendored)
     third_party/imgui/imgui.cpp

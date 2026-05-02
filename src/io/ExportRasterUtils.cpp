@@ -2,7 +2,6 @@
 
 #include <algorithm>
 #include <cstdint>
-#include <cstddef>
 
 namespace Framenote {
 namespace ExportRasterUtils {

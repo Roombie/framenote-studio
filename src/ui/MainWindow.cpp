@@ -9,9 +9,6 @@
 
 #include "ui/Theme.h"
 #include "io/FileManager.h"
-#include "io/GifExporter.h"
-#include "io/PngExporter.h"
-#include "io/ExportOptions.h"
 #include "io/FileDialog.h"
 #include "core/Frame.h"
 #include "core/History.h"
@@ -22,8 +19,6 @@
 namespace Framenote {
 
 static const char* FILTER_FRAMENOTE = "Framenote Files\0*.framenote\0All Files\0*.*\0";
-static const char* FILTER_GIF       = "GIF Files\0*.gif\0All Files\0*.*\0";
-static const char* FILTER_PNG       = "PNG Files\0*.png\0All Files\0*.*\0";
 
 static std::string toLowerCopy(std::string s) {
     std::transform(
