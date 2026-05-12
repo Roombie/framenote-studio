@@ -15,6 +15,9 @@ public:
     void commitFloat(Document& doc, int frameIndex, const ToolEvent& e);
     void deselect(const ToolEvent& e);
 
+    void liftFloat (Document& doc, int frameIndex, const ToolEvent& e);
+    void stampFloat(Document& doc, int frameIndex, const ToolEvent& e);
+
     // Preview state
     bool isSelecting() const { return m_mode == Mode::Selecting; }
     bool isMoving()    const { return m_mode == Mode::Moving; }
@@ -31,9 +34,6 @@ private:
         Selecting,
         Moving
     };
-
-    void liftFloat(Document& doc, int frameIndex, const ToolEvent& e);
-    void stampFloat(Document& doc, int frameIndex, const ToolEvent& e);
 
     Mode m_mode      = Mode::Idle;
     int  m_startX    = 0;

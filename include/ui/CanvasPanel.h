@@ -229,6 +229,13 @@ private:
     bool& m_strokeActive;
     int&  m_strokeFrameIndex;
 
+    // Ctrl+drag: move selection (or whole canvas) without switching tools
+    bool m_ctrlDragActive  = false;
+    bool m_ctrlDragLifted  = false;
+    bool m_ctrlDragIsWhole = false; // true = whole canvas (no selection), false = selection float
+    int  m_ctrlDragLastX   = 0;
+    int  m_ctrlDragLastY   = 0;
+
     Selection*   m_selection = nullptr;
     DocumentTab* m_tab       = nullptr;
 };

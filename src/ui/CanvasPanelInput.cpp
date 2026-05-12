@@ -5,6 +5,7 @@
 #include "core/DocumentTab.h"
 
 #include "tools/SelectionTool.h"
+#include "tools/MoveTool.h"
 
 #include <imgui.h>
 #include <algorithm>
@@ -394,6 +395,112 @@ void CanvasPanel::handleToolInput(
         if (m_tab)
             m_tab->canvasToolDragArmed = false;
     }
+
+    // ── Ctrl+drag: move selection (or whole canvas) without switching tools ──
+    {
+        bool ctrlHeld = io.KeyCtrl;
+
+        bool isOverridableTool =
+            !isSelectionTool &&
+            !isMoveTool;
+
+        // Start ctrl-drag on press — use raw rect test because
+        // canvasInputHovered / IsItemHovered can return false when
+        // Ctrl is held and ImGui considers the click "consumed".
+        bool ctrlPressedInCanvas =
+            io.MouseClicked[0] &&
+            rawInCanvas;
+
+        if (ctrlHeld &&
+            isOverridableTool &&
+            canDraw &&
+            ctrlPressedInCanvas &&
+            !m_ctrlDragActive &&
+            !m_strokeActive) {
+
+            int px = static_cast<int>(
+                std::floor((mousePos.x - originX) / m_zoom));
+            int py = static_cast<int>(
+                std::floor((mousePos.y - originY) / m_zoom));
+
+            m_ctrlDragActive  = true;
+            m_ctrlDragLifted  = false;
+            m_ctrlDragIsWhole = (!m_selection || m_selection->isEmpty());
+            m_ctrlDragLastX   = px;
+            m_ctrlDragLastY   = py;
+
+            pushCurrentFrameSnapshot();
+        }
+
+        // Stop ctrl-drag on mouse release or ctrl release
+        if (m_ctrlDragActive && (!drawingMouseDown || !ctrlHeld || !canDraw)) {
+            // Stamp floating pixels back if we lifted them
+            if (m_ctrlDragLifted && m_tab && m_tab->hasFloating) {
+                ToolEvent e = makeToolEventForActiveTool();
+                int fi = m_timeline->currentFrame();
+
+                if (m_ctrlDragIsWhole) {
+                    auto* moveTool = static_cast<MoveTool*>(
+                        m_toolManager->getTool(ToolType::Move));
+                    if (moveTool)
+                        moveTool->stampFloat(*m_document, fi, e);
+                }
+                else {
+                    auto* selTool = static_cast<SelectionTool*>(
+                        m_toolManager->getTool(ToolType::Select));
+                    if (selTool)
+                        selTool->stampFloat(*m_document, fi, e);
+                }
+            }
+
+            m_ctrlDragActive = false;
+            m_ctrlDragLifted = false;
+        }
+
+        // Drive ctrl-drag while mouse is held
+        if (m_ctrlDragActive && drawingMouseDown && ctrlHeld && canDraw) {
+            int px = static_cast<int>(
+                std::floor((mousePos.x - originX) / m_zoom));
+            int py = static_cast<int>(
+                std::floor((mousePos.y - originY) / m_zoom));
+
+            int dx = px - m_ctrlDragLastX;
+            int dy = py - m_ctrlDragLastY;
+
+            if (dx != 0 || dy != 0) {
+                int fi = m_timeline->currentFrame();
+                ToolEvent e = makeToolEventForActiveTool();
+
+                if (!m_ctrlDragLifted) {
+                    m_ctrlDragLifted = true;
+
+                    if (m_ctrlDragIsWhole) {
+                        auto* moveTool = static_cast<MoveTool*>(
+                            m_toolManager->getTool(ToolType::Move));
+                        if (moveTool)
+                            moveTool->liftFloat(*m_document, fi, e);
+                    }
+                    else {
+                        auto* selTool = static_cast<SelectionTool*>(
+                            m_toolManager->getTool(ToolType::Select));
+                        if (selTool)
+                            selTool->liftFloat(*m_document, fi, e);
+                    }
+                }
+
+                if (m_tab && m_tab->hasFloating) {
+                    m_tab->floatOffsetX += dx;
+                    m_tab->floatOffsetY += dy;
+                }
+
+                m_ctrlDragLastX = px;
+                m_ctrlDragLastY = py;
+            }
+
+            return; // don't pass event to the active drawing tool
+        }
+    }
+    // ────────────────────────────────────────────────────────────────────────
 
     if (!tool || !canDraw || !drawingMouseDown)
         return;

@@ -84,6 +84,7 @@ void commitExistingFloatingSelection(Document& doc, int frameIndex, const ToolEv
 
     e.tab->hasFloating = false;
     e.tab->floatingSource = FloatingSource::None;
+    e.tab->floatCanvasErased = false;
     e.tab->floatPixels.clear();
     e.tab->floatW = 0;
     e.tab->floatH = 0;
@@ -153,6 +154,7 @@ void MoveTool::liftFloat(Document& doc, int frameIndex, const ToolEvent& e) {
 
     e.tab->hasFloating = true;
     e.tab->floatingSource = FloatingSource::CanvasMove;
+    e.tab->floatCanvasErased = false; // canvas not yet cleared; erasing happens in onDrag
 }
 
 // ── stampFloat ────────────────────────────────────────────────────────────────
@@ -175,7 +177,7 @@ void MoveTool::stampFloat(Document& doc, int frameIndex, const ToolEvent& e) {
     int deltaX = e.tab->floatOffsetX - e.tab->floatStartX;
     int deltaY = e.tab->floatOffsetY - e.tab->floatStartY;
 
-    if (m_erased) {
+    if (e.tab->floatCanvasErased) {
         for (int py = 0; py < fh; ++py) {
             for (int px = 0; px < fw; ++px) {
                 size_t srcIdx = static_cast<size_t>((py * fw + px) * 4);
@@ -204,7 +206,7 @@ void MoveTool::stampFloat(Document& doc, int frameIndex, const ToolEvent& e) {
     }
 
     // Keep the selection, but move its mask with the whole-canvas movement.
-    if (e.selection && !e.selection->isEmpty() && m_erased) {
+    if (e.selection && !e.selection->isEmpty() && e.tab->floatCanvasErased) {
         if (deltaX != 0 || deltaY != 0) {
             int sw = e.selection->width();
             int sh = e.selection->height();
@@ -230,6 +232,7 @@ void MoveTool::stampFloat(Document& doc, int frameIndex, const ToolEvent& e) {
 
     e.tab->hasFloating = false;
     e.tab->floatingSource = FloatingSource::None;
+    e.tab->floatCanvasErased = false;
     e.tab->floatPixels.clear();
     e.tab->floatW = 0;
     e.tab->floatH = 0;
@@ -280,6 +283,7 @@ void MoveTool::onDrag(Document& doc, int frameIndex, const ToolEvent& e) {
     // Erase the original whole drawing only once, on first real movement.
     if (!m_erased) {
         m_erased = true;
+        e.tab->floatCanvasErased = true; // record in tab so any commit path knows to write back
 
         auto& frame = doc.frame(frameIndex);
 
@@ -314,9 +318,16 @@ void MoveTool::onDrag(Document& doc, int frameIndex, const ToolEvent& e) {
 void MoveTool::onRelease(Document& doc, int frameIndex, const ToolEvent& e) {
     m_dragging = false;
 
-    (void)doc;
-    (void)frameIndex;
-    (void)e;
+    // If we lifted and erased the canvas during this drag, stamp the floating
+    // pixels back now. Without this, releasing the mouse (including clicking
+    // outside the canvas window) leaves the canvas cleared with no pixels
+    // ever written back, effectively deleting the drawing.
+    if (m_lifted) {
+        stampFloat(doc, frameIndex, e);
+    }
+
+    m_lifted = false;
+    m_erased = false;
 }
 
 void MoveTool::commitFloat(Document& doc, int frameIndex, const ToolEvent& e) {

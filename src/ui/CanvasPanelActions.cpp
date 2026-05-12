@@ -132,6 +132,7 @@ void CanvasPanel::clearFloatingState() {
 
     m_tab->hasFloating = false;
     m_tab->floatingSource = FloatingSource::None;
+    m_tab->floatCanvasErased = false;
     m_tab->floatPixels.clear();
     m_tab->floatW = 0;
     m_tab->floatH = 0;

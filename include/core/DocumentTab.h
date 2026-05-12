@@ -52,14 +52,15 @@ struct DocumentTab {
     bool canvasToolDragArmed = false;
 
     // Floating selection (Move tool) — pixels lifted off the canvas
-    bool                   hasFloating    = false;
-    FloatingSource         floatingSource = FloatingSource::None;
-    int                    floatOffsetX   = 0;
-    int                    floatOffsetY   = 0;
-    int                    floatStartX    = 0;
-    int                    floatStartY    = 0;
-    int                    floatW         = 0;
-    int                    floatH         = 0;
+    bool                   hasFloating         = false;
+    FloatingSource         floatingSource      = FloatingSource::None;
+    bool                   floatCanvasErased   = false; // true if canvas pixels were cleared when float was lifted
+    int                    floatOffsetX        = 0;
+    int                    floatOffsetY        = 0;
+    int                    floatStartX         = 0;
+    int                    floatStartY         = 0;
+    int                    floatW              = 0;
+    int                    floatH              = 0;
     std::vector<uint8_t>   floatPixels;   // BGRA, floatW * floatH * 4
 
     // Recovery/autosave state — persisted only during the app session

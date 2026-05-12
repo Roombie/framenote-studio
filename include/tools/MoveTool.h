@@ -15,12 +15,12 @@ public:
     // Stamp float back to canvas — called on tool switch, Enter, Escape
     void commitFloat(Document& doc, int frameIndex, const ToolEvent& e);
 
+    void liftFloat (Document& doc, int frameIndex, const ToolEvent& e);
+    void stampFloat(Document& doc, int frameIndex, const ToolEvent& e);
+
     bool isMoving() const { return m_dragging; }
 
 private:
-    void liftFloat(Document& doc, int frameIndex, const ToolEvent& e);
-    void stampFloat(Document& doc, int frameIndex, const ToolEvent& e);
-
     bool m_dragging  = false;
     bool m_lifted    = false;  // true once liftFloat has been called
     bool m_erased    = false;  // true once original pixels erased from frame

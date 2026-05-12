@@ -341,6 +341,15 @@ void MainWindow::render() {
             }
         }
 
+        // Ctrl+A -- Select all
+        if (ctrl && ImGui::IsKeyPressed(ImGuiKey_A, false)) {
+            auto* tab = m_tabManager->activeTab();
+
+            if (tab && tab->selection) {
+                tab->selection->selectAll();
+            }
+        }
+
         // Ctrl+Z -- Undo
         if (ctrl && ImGui::IsKeyPressed(ImGuiKey_Z, false)) {
             auto* tab = m_tabManager->activeTab();
@@ -522,6 +531,18 @@ void MainWindow::renderMenuBar() {
                         tab->history->redo(std::move(current));
 
                     applyHistoryEntry(tab, restored);
+                }
+            }
+
+            ImGui::EndDisabled();
+
+            ImGui::Separator();
+
+            ImGui::BeginDisabled(!tab);
+
+            if (ImGui::MenuItem("Select All", "Ctrl+A")) {
+                if (tab && tab->selection) {
+                    tab->selection->selectAll();
                 }
             }
 
